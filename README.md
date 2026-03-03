@@ -159,7 +159,7 @@ pip install -r requirements.txt
 
 ### Run
 
-All functionality is launched from a single entry point:
+All functionality is launched from a single point:
 
 ```bash
 python launch.py
