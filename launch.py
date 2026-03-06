@@ -23,7 +23,13 @@ import importlib
 # ---------------------------------------------------------------------------
 # Ensure we're in the right directory (DriftSync project root)
 # ---------------------------------------------------------------------------
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    # Running inside a PyInstaller bundle — __file__ points to the temp
+    # extraction folder.  Use the directory that contains the .exe instead.
+    SCRIPT_DIR = os.path.dirname(sys.executable)
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 os.chdir(SCRIPT_DIR)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
@@ -119,9 +125,12 @@ def main() -> None:
     print("  DriftSync: Real-Time Cognitive Drift Prediction")
     print()
 
-    if not ensure_dependencies():
-        print("Cannot start — dependency installation failed.")
-        sys.exit(1)
+    # When running as a PyInstaller bundle all packages are already included —
+    # skip the pip installer completely (sys.executable is the .exe, not python).
+    if not getattr(sys, "frozen", False):
+        if not ensure_dependencies():
+            print("Cannot start — dependency installation failed.")
+            sys.exit(1)
 
     # All deps available — launch the application
     try:

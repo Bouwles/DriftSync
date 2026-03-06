@@ -111,7 +111,10 @@ class DriftSimulator:
         font_med    = pygame.font.SysFont("Consolas", 22)
         font_small  = pygame.font.SysFont("Consolas", 16)
 
-        self._show_intro(screen, font_large, font_med, clock)
+        if self._show_intro(screen, font_large, font_med, clock) == "quit":
+            pygame.quit()
+            path = self.engine.save_session()
+            return str(path)
 
         # --------------- main task loop --------------------------------
         while not self.engine.is_finished:
@@ -324,17 +327,19 @@ class DriftSimulator:
 
     def _render_text_screen(
         self, screen, lines, clock, wait_key=None, timeout: float | None = None
-    ) -> None:
+    ) -> str:
+        """Returns 'quit' if window closed, 'ok' on key press, 'timeout' on timer."""
         start = time.time()
         while True:
             if timeout and (time.time() - start) > timeout:
-                break
+                return "timeout"
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    return "quit"
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    return "quit"
                 if wait_key and event.type == pygame.KEYDOWN and event.key == wait_key:
-                    return
+                    return "ok"
 
             screen.fill(BG_COLOR)
             total_h = sum(fnt.get_height() + 6 for _, fnt, _ in lines)

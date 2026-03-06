@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python -c \":*)",
-      "Bash(python3 -c \"import torch; print\\(f''torch: {torch.__version__}''\\)\")"
+      "Bash(python3 -c \"import torch; print\\(f''torch: {torch.__version__}''\\)\")",
+      "Bash(python -m PyInstaller --version)"
     ]
   }
 }
