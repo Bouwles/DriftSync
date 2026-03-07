@@ -51,6 +51,7 @@ class Trial:
 class SessionData:
     """Full session record."""
     session_id: str
+    session_name: str
     start_time: str
     config: dict
     trials: List[Trial] = field(default_factory=list)
@@ -79,6 +80,7 @@ class TaskEngine:
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.session_data = SessionData(
             session_id=self.session_id,
+            session_name=cfg.session_name,
             start_time=datetime.now().isoformat(),
             config=cfg.__dict__,
         )

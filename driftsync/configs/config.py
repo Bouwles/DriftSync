@@ -21,6 +21,9 @@ class SimulatorConfig:
     data_dir: str = "driftsync/data/raw"
     session_file: str = "session_{timestamp}.json"
 
+    # Session identity
+    session_name: str = ""             # user-supplied label (optional)
+
     # Fatigue / drift simulation parameters
     fatigue_start_trial: int = 50      # drift increases after this
     noise_base: float = 0.05           # base noise on reaction times

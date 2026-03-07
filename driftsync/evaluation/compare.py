@@ -73,7 +73,7 @@ def load_trained_model(model_type: str, device: torch.device):
         )
 
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-    model_cfg = CONFIG.lstm if model_type == "lstm" else CONFIG.transformer
+    model_cfg = ckpt.get("model_cfg", CONFIG.lstm if model_type == "lstm" else CONFIG.transformer)
     model = build_model(model_type, model_cfg)
     model.load_state_dict(ckpt["model_state_dict"])
     model.to(device)
