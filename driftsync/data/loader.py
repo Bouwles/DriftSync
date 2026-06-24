@@ -5,6 +5,9 @@ Loads raw JSON session files, validates them, and converts to flat
 pandas DataFrames for further processing.
 """
 
+from __future__ import annotations
+
+
 import json
 from pathlib import Path
 from typing import List

@@ -8,6 +8,9 @@ Callable via:
     python -m driftsync.training.pipeline --model transformer
 """
 
+from __future__ import annotations
+
+
 import argparse
 import json
 from pathlib import Path

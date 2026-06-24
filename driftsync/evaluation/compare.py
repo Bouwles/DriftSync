@@ -19,6 +19,9 @@ Usage
     python -m driftsync.evaluation.compare
 """
 
+from __future__ import annotations
+
+
 import argparse
 import json
 import time

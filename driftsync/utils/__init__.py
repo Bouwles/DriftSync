@@ -6,6 +6,7 @@ from .metrics import (
     compute_roc_curve,
     compute_confusion_matrix,
     bootstrap_ci,
+    compute_lead_time_metrics,
 )
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "compute_roc_curve",
     "compute_confusion_matrix",
     "bootstrap_ci",
+    "compute_lead_time_metrics",
 ]

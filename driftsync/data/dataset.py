@@ -40,6 +40,11 @@ FEATURE_COLS = [
     "streak_incorrect",
     "target_match",
     "action_click",
+    # Extended features (v2)
+    "rolling_rt_variance",
+    "time_since_last_error_norm",
+    "rt_trend",
+    "fatigue_index",
 ]
 
 

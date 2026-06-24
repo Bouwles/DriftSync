@@ -8,6 +8,7 @@ from .config import (
     TrainingConfig,
     EvaluationConfig,
     RealtimeConfig,
+    CalibrationConfig,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "TrainingConfig",
     "EvaluationConfig",
     "RealtimeConfig",
+    "CalibrationConfig",
 ]

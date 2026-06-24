@@ -27,6 +27,9 @@ Architecture
     Logit (B,)
 """
 
+from __future__ import annotations
+
+
 import torch
 import torch.nn as nn
 from driftsync.models.base import DriftPredictor

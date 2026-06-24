@@ -109,6 +109,75 @@ def compute_confusion_matrix(
     return confusion_matrix(y_true, y_pred)
 
 
+def compute_lead_time_metrics(
+    warning_events: list,
+    error_events: list,
+) -> dict:
+    """
+    Compute prediction lead time metrics for a session.
+
+    Prediction lead time = timestamp_of_error - timestamp_of_first_warning_before_error
+
+    Args:
+        warning_events: List of dicts with:
+            {"trial_idx": int, "timestamp": float, "probability": float}
+            Only events where warning == True should be included.
+        error_events: List of dicts with:
+            {"trial_idx": int, "timestamp": float}
+            Only actual errors (is_correct == False) should be included.
+
+    Returns:
+        Dictionary with keys:
+            n_errors, n_predicted_before, n_missed,
+            avg_lead_time_s, min_lead_time_s, max_lead_time_s,
+            false_positive_warnings
+    """
+    n_errors = len(error_events)
+    if n_errors == 0:
+        return {
+            "n_errors": 0, "n_predicted_before": 0, "n_missed": 0,
+            "avg_lead_time_s": 0.0, "min_lead_time_s": 0.0,
+            "max_lead_time_s": 0.0, "false_positive_warnings": 0,
+        }
+
+    lead_times = []
+    predicted  = 0
+
+    for err in error_events:
+        err_t = err["timestamp"]
+        err_i = err["trial_idx"]
+        # Warnings that fired before this error within a 20-trial window
+        preceding = [
+            w for w in warning_events
+            if w["trial_idx"] < err_i and (err_i - w["trial_idx"]) <= 20
+        ]
+        if preceding:
+            first_warn_t = min(w["timestamp"] for w in preceding)
+            lead_times.append(max(0.0, err_t - first_warn_t))
+            predicted += 1
+
+    n_missed = n_errors - predicted
+
+    fp = 0
+    for w in warning_events:
+        followed = any(
+            e["trial_idx"] > w["trial_idx"] and (e["trial_idx"] - w["trial_idx"]) <= 20
+            for e in error_events
+        )
+        if not followed:
+            fp += 1
+
+    return {
+        "n_errors":                n_errors,
+        "n_predicted_before":      predicted,
+        "n_missed":                n_missed,
+        "avg_lead_time_s":         float(np.mean(lead_times))  if lead_times else 0.0,
+        "min_lead_time_s":         float(np.min(lead_times))   if lead_times else 0.0,
+        "max_lead_time_s":         float(np.max(lead_times))   if lead_times else 0.0,
+        "false_positive_warnings": fp,
+    }
+
+
 def bootstrap_ci(
     y_true: np.ndarray,
     y_pred_proba: np.ndarray,

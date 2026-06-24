@@ -488,6 +488,14 @@ class DemoWorker:
         Trainer(tf, train_loader, val_loader, train_cfg, device).train(on_epoch_end=tf_cb)
 
         self.current_step = 4
+        self._log("Training baseline sklearn models (LogisticRegression + RandomForest)...")
+        try:
+            from driftsync.ml.baseline_models import train_baseline_models
+            _mode, _mdl = train_baseline_models(X_train, y_train)
+            self._log(f"Baseline models trained: {_mode}")
+        except Exception as _be:
+            self._log(f"Baseline model training skipped: {_be}")
+
         self._log("Comparing models and generating plots...")
         self.results_dir.mkdir(parents=True, exist_ok=True)
         run_comparison(data_cfg=data_cfg, results_dir=str(self.results_dir))
@@ -541,12 +549,16 @@ class DriftSyncApplication:
         self.human_scroll    = 0
         self.human_selected  = None
 
-        self.play_num_trials    = 150
-        self._play_session_name = ""
-        self._play_task_done    = False
-        self._play_name_input   = None
+        self.play_num_trials     = 150
+        self._play_session_name  = ""
+        self._play_task_done     = False
+        self._play_name_input    = None
+        self._play_skip_calib    = False
 
         self.live_model_choice = "lstm"
+
+        # Session metrics (loaded from driftsync/sessions/*.json)
+        self.session_metrics: list = []
 
         self._build_menu_buttons()
         self._build_learn_buttons()
@@ -666,6 +678,7 @@ class DriftSyncApplication:
         if target == State.RESULTS:
             self._load_ml_results()
             self._load_human_sessions()
+            self._load_session_metrics()
         elif target == State.DEMO:
             self.demo_logs = []
             self.demo_metrics = {}
@@ -1202,6 +1215,45 @@ class DriftSyncApplication:
         else:
             self.result_metrics = {}
 
+    def _load_session_metrics(self) -> None:
+        """Load per-session metric summaries from driftsync/sessions/."""
+        metrics_dir = Path("driftsync/sessions")
+        self.session_metrics = []
+        if not metrics_dir.exists():
+            return
+        for p in sorted(metrics_dir.glob("metrics_*.json"), reverse=True):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    self.session_metrics.append(json.load(f))
+            except Exception:
+                continue
+
+    def _export_sessions_csv(self) -> None:
+        """Export all human session trial data as CSV."""
+        raw_dir = Path("driftsync/data/raw")
+        if not raw_dir.exists():
+            return
+        import csv
+        from datetime import datetime as _dt
+        out = Path("driftsync/sessions") / f"export_{_dt.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for p in sorted(raw_dir.glob("session_*.json")):
+            try:
+                with open(p) as f:
+                    data = json.load(f)
+                for t in data.get("trials", []):
+                    t["session_id"] = data.get("session_id", "")
+                    rows.append(t)
+            except Exception:
+                continue
+        if rows:
+            keys = list(rows[0].keys())
+            with open(out, "w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
+                w.writeheader()
+                w.writerows(rows)
+
     def _load_human_sessions(self) -> None:
         raw_dir = Path("driftsync/data/raw")
         self.human_sessions = []
@@ -1365,6 +1417,11 @@ class DriftSyncApplication:
             self.f_btn_sm, color=PANEL2, text_color=DIM, hover_text=ACCENT)
         self._btn_human_open.draw(self.screen)
 
+        self._btn_export_csv = Button(
+            pygame.Rect(W - 340, oy - 28, 108, 26), "Export CSV",
+            self.f_btn_sm, color=PANEL2, text_color=DIM, hover_text=GREEN)
+        self._btn_export_csv.draw(self.screen)
+
         if not self.human_sessions:
             draw_text(self.screen, "No human sessions found.", self.f_body, TEXT, cx + 20, oy + 20)
             draw_text(self.screen, "Play the Task to record sessions.", self.f_small, DIM, cx + 20, oy + 44)
@@ -1400,16 +1457,33 @@ class DriftSyncApplication:
             draw_text(self.screen, f"{sess['accuracy']:.1%}", self.f_body,  acc_col, cols_x[4], y + 6)
             draw_text(self.screen, f"{sess['avg_rt']:.3f}s",  self.f_small, DIM,     cols_x[5], y + 7)
 
-        detail_y = H - 152
+        detail_y = H - 165
         hline(self.screen, detail_y, cx, W)
         if self.human_selected is not None and self.human_selected < len(self.human_sessions):
             s = self.human_sessions[self.human_selected]
-            draw_text(self.screen, s["name"] or s["id"], self.f_sub, TEXT, cx + 14, detail_y + 10)
+            draw_text(self.screen, s["name"] or s["id"], self.f_sub, TEXT, cx + 14, detail_y + 8)
             draw_text(self.screen,
                       f"Date: {s['start']}   Trials: {s['trials']}   "
                       f"Accuracy: {s['accuracy']:.1%}   Avg RT: {s['avg_rt']:.3f}s",
-                      self.f_body, DIM, cx + 14, detail_y + 36)
-            draw_text(self.screen, str(s["path"]), self.f_small, DIM, cx + 14, detail_y + 60)
+                      self.f_body, DIM, cx + 14, detail_y + 30)
+
+            # Show lead time metrics if available for this session
+            sid = s.get("id", "")
+            matched_m = next(
+                (m for m in self.session_metrics if m.get("session_id") == sid), None
+            )
+            if matched_m:
+                n_pred  = matched_m.get("n_predicted_before", 0)
+                n_miss  = matched_m.get("n_missed", 0)
+                avg_lt  = matched_m.get("avg_lead_time_s", 0.0)
+                mode    = matched_m.get("model_mode", "?")
+                calibd  = matched_m.get("calibrated", False)
+                draw_text(self.screen,
+                          f"Predicted before error: {n_pred}   Missed: {n_miss}   "
+                          f"Avg lead time: {avg_lt:.2f}s   Model: {mode}   "
+                          f"Calibrated: {'yes' if calibd else 'no'}",
+                          self.f_small, ACCENT, cx + 14, detail_y + 52)
+            draw_text(self.screen, str(s["path"]), self.f_small, DIM, cx + 14, detail_y + 70)
         else:
             draw_text(self.screen, "Click a row to view session details.",
                       self.f_body, DIM, cx + 14, detail_y + 26)
@@ -1490,8 +1564,11 @@ class DriftSyncApplication:
         if self.results_tab == "human":
             if hasattr(self, "_btn_human_refresh") and self._btn_human_refresh.handle_event(event):
                 self._load_human_sessions()
+                self._load_session_metrics()
             if hasattr(self, "_btn_human_open") and self._btn_human_open.handle_event(event):
                 self._open_folder(Path("driftsync/data/raw"))
+            if hasattr(self, "_btn_export_csv") and self._btn_export_csv.handle_event(event):
+                self._export_sessions_csv()
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 cx, oy = self._cx, 90 + 25
                 row_h  = 28
@@ -1532,6 +1609,9 @@ class DriftSyncApplication:
         self._btn_play_start = Button(
             pygame.Rect(cx, BTY, 210, 46), "Start Task",
             self.f_btn, accent_fill=True)
+        self._btn_play_skip_calib = Button(
+            pygame.Rect(cx + 226, BTY, 180, 46), "Skip Calibration",
+            self.f_btn, color=PANEL2, text_color=DIM, hover_text=ACCENT)
         self._btn_play_human_results = Button(
             pygame.Rect(cx, AFTY + 28, 260, 42), "View Human Sessions ->",
             self.f_btn, color=PANEL2, text_color=TEXT, hover_text=ACCENT)
@@ -1570,6 +1650,19 @@ class DriftSyncApplication:
         self._btn_play_trials_plus.draw(self.screen)
 
         self._btn_play_start.draw(self.screen)
+        self._btn_play_skip_calib.draw(self.screen)
+
+        # Calibration status
+        try:
+            from driftsync.ml.calibrator import CalibrationEngine
+            is_calib = CalibrationEngine.is_calibrated()
+            calib_col = GREEN if is_calib else YELLOW
+            calib_lbl = "Calibrated" if is_calib else "Not calibrated (will run on first task)"
+        except Exception:
+            is_calib  = False
+            calib_col = DIM
+            calib_lbl = "Calibration unavailable"
+        draw_text(self.screen, f"Calibration: {calib_lbl}", self.f_small, calib_col, x, BTY + 56)
 
         if self._play_task_done:
             draw_text(self.screen, "Session saved ->  driftsync/data/raw/",
@@ -1589,6 +1682,8 @@ class DriftSyncApplication:
             self.play_num_trials = max(50, self.play_num_trials - 25)
         if hasattr(self, "_btn_play_trials_plus") and self._btn_play_trials_plus.handle_event(event):
             self.play_num_trials = min(500, self.play_num_trials + 25)
+        if hasattr(self, "_btn_play_skip_calib") and self._btn_play_skip_calib.handle_event(event):
+            self._play_skip_calib = not self._play_skip_calib
         if hasattr(self, "_btn_play_start") and self._btn_play_start.handle_event(event):
             name = self._play_name_input.text.strip() if self._play_name_input else ""
             self._play_session_name = name
@@ -1676,13 +1771,17 @@ class DriftSyncApplication:
         self._build_play_task_buttons()
 
     def _launch_play_task(self) -> None:
-        name   = getattr(self, "_play_session_name", "")
-        trials = getattr(self, "play_num_trials", 150)
+        name       = getattr(self, "_play_session_name", "")
+        trials     = getattr(self, "play_num_trials", 150)
+        skip_calib = getattr(self, "_play_skip_calib", False)
         pygame.quit()
         try:
             from driftsync.configs import SimulatorConfig
             from driftsync.simulator.gui import DriftSimulator
-            DriftSimulator(SimulatorConfig(num_trials=trials, session_name=name)).run()
+            DriftSimulator(
+                SimulatorConfig(num_trials=trials, session_name=name),
+                skip_calibration=skip_calib,
+            ).run()
         except Exception as e:
             print(f"Simulator error: {e}")
         finally:

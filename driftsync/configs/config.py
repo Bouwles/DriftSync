@@ -121,6 +121,14 @@ class EvaluationConfig:
 
 
 @dataclass
+class CalibrationConfig:
+    """Configuration for the pre-session calibration phase."""
+    num_trials: int = 25
+    calibration_dir: str = "driftsync/sessions/calibration"
+    baseline_file: str = "driftsync/sessions/calibration/baseline_latest.json"
+
+
+@dataclass
 class RealtimeConfig:
     """Configuration for real-time inference."""
     model_type: str = "lstm"           # "lstm" or "transformer"
@@ -141,6 +149,7 @@ class DriftSyncConfig:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     realtime: RealtimeConfig = field(default_factory=RealtimeConfig)
+    calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
 
 
 # Default global config instance

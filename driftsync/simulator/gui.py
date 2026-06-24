@@ -17,6 +17,9 @@ Displays
 - Fatigue / drift warning overlay (high error rate indicator)
 """
 
+from __future__ import annotations
+
+
 import sys
 import math
 import time
@@ -26,6 +29,12 @@ import pygame
 from driftsync.configs import SimulatorConfig
 from driftsync.simulator.task_engine import TaskEngine
 from driftsync.utils import get_logger
+
+try:
+    from driftsync.ml.calibrator import CalibrationEngine, BaselineStats
+    _CALIBRATOR_AVAILABLE = True
+except ImportError:
+    _CALIBRATOR_AVAILABLE = False
 
 logger = get_logger(__name__)
 
@@ -91,46 +100,223 @@ class DriftSimulator:
         session_file = sim.run()
     """
 
-    def __init__(self, cfg: SimulatorConfig | None = None):
-        self.cfg = cfg or SimulatorConfig()
-        self.engine = TaskEngine(self.cfg)
+    def __init__(self, cfg: SimulatorConfig | None = None, skip_calibration: bool = False):
+        self.cfg              = cfg or SimulatorConfig()
+        self.engine           = TaskEngine(self.cfg)
+        self.skip_calibration = skip_calibration
+        self.baseline         = None
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
     def run(self) -> str:
-        """Run the simulator and return the path to the saved session file."""
+        """Run the simulator (with optional calibration) and return the session file path."""
         pygame.init()
         pygame.display.set_caption("DriftSync — Cognitive Task Simulator")
 
         screen = pygame.display.set_mode((self.cfg.window_width, self.cfg.window_height))
-        clock = pygame.time.Clock()
+        clock  = pygame.time.Clock()
 
-        font_large  = pygame.font.SysFont("Consolas", 32, bold=True)
-        font_med    = pygame.font.SysFont("Consolas", 22)
-        font_small  = pygame.font.SysFont("Consolas", 16)
+        font_large = pygame.font.SysFont("Consolas", 32, bold=True)
+        font_med   = pygame.font.SysFont("Consolas", 22)
+        font_small = pygame.font.SysFont("Consolas", 16)
+
+        # Calibration phase (unless skipped or already calibrated this session)
+        if _CALIBRATOR_AVAILABLE and not self.skip_calibration:
+            needs_calib = not CalibrationEngine.is_calibrated()
+            if needs_calib:
+                self.baseline = self._run_calibration(screen, clock, font_large, font_med, font_small)
+            else:
+                self.baseline = CalibrationEngine.load()
+        else:
+            self.baseline = None
 
         if self._show_intro(screen, font_large, font_med, clock) == "quit":
             pygame.quit()
             path = self.engine.save_session()
             return str(path)
 
-        # --------------- main task loop --------------------------------
         while not self.engine.is_finished:
             stimulus = self.engine.next_stimulus()
-            result = self._run_trial(
+            result   = self._run_trial(
                 screen, clock, stimulus, font_large, font_med, font_small
             )
             if result == "quit":
                 break
 
-        # --------------- outro -----------------------------------------
         self._show_outro(screen, font_large, font_med, clock)
         pygame.quit()
 
         path = self.engine.save_session()
         return str(path)
+
+    # ------------------------------------------------------------------
+    # Calibration
+    # ------------------------------------------------------------------
+
+    def _run_calibration(
+        self,
+        screen: pygame.Surface,
+        clock: pygame.time.Clock,
+        font_large,
+        font_med,
+        font_small,
+        num_trials: int = 25,
+    ):
+        """
+        Run a short calibration phase before the main task.
+
+        Runs `num_trials` trials with a "CALIBRATION MODE" header.
+        After completion, computes and saves the user's baseline stats.
+
+        Returns a BaselineStats object, or None on failure.
+        """
+        # Show calibration intro screen
+        calib_lines = [
+            ("CALIBRATION MODE", font_large, RULE_COLOR),
+            ("", font_med, TEXT_COLOR),
+            (f"You will complete {num_trials} practice trials.", font_med, TEXT_COLOR),
+            ("This measures your normal performance level.", font_med, TEXT_COLOR),
+            ("Results are saved as your personal baseline.", font_med, (160, 160, 200)),
+            ("", font_med, TEXT_COLOR),
+            ("No risk warnings shown during calibration.", font_med, (160, 160, 200)),
+            ("", font_med, TEXT_COLOR),
+            ("Press ENTER to begin calibration", font_large, SCORE_COLOR),
+        ]
+        result = self._render_text_screen(screen, calib_lines, clock, wait_key=pygame.K_RETURN)
+        if result == "quit":
+            return None
+
+        # Create a temporary engine for calibration trials
+        from driftsync.configs import SimulatorConfig as SC
+        calib_cfg    = SC(num_trials=num_trials, session_name="calibration",
+                          data_dir=self.cfg.data_dir)
+        calib_engine = TaskEngine(calib_cfg)
+
+        completed = 0
+        while not calib_engine.is_finished:
+            stimulus = calib_engine.next_stimulus()
+            result   = self._run_trial_calibration(
+                screen, clock, stimulus, font_large, font_med, font_small,
+                calib_engine, completed, num_trials
+            )
+            completed += 1
+            if result == "quit":
+                break
+
+        # Compute baseline from calibration trials
+        if not calib_engine.session_data.trials:
+            return None
+
+        engine = CalibrationEngine()
+        baseline = engine.compute_baseline(calib_engine.session_data.trials)
+        engine.save(baseline)
+        logger.info(
+            "Calibration complete: mean_rt=%.3f  accuracy=%.1f%%",
+            baseline.mean_rt, baseline.accuracy * 100,
+        )
+
+        # Show calibration summary
+        acc_val = baseline.accuracy
+        summary_lines = [
+            ("Calibration Complete", font_large, RULE_COLOR),
+            ("", font_med, TEXT_COLOR),
+            ("Your baseline has been recorded:", font_med, TEXT_COLOR),
+            (f"Mean reaction time : {baseline.mean_rt:.3f}s", font_med, SCORE_COLOR),
+            (f"Accuracy           : {acc_val:.1%}", font_med, SCORE_COLOR),
+            (f"Error rate         : {baseline.error_rate:.1%}", font_med, SCORE_COLOR),
+            ("", font_med, TEXT_COLOR),
+            ("The main task will now begin.", font_med, (160, 160, 200)),
+            ("Press ENTER to continue", font_large, SCORE_COLOR),
+        ]
+        self._render_text_screen(screen, summary_lines, clock, wait_key=pygame.K_RETURN, timeout=12.0)
+        return baseline
+
+    def _run_trial_calibration(
+        self,
+        screen: pygame.Surface,
+        clock: pygame.time.Clock,
+        stimulus: dict,
+        font_large,
+        font_med,
+        font_small,
+        engine: "TaskEngine",
+        completed: int,
+        total: int,
+    ) -> str:
+        """Run a single calibration trial (no risk overlay)."""
+        shape       = stimulus["shape"]
+        sx, sy      = stimulus["x"], stimulus["y"]
+        rule        = stimulus["rule"]
+        time_window = stimulus["time_window"]
+        radius      = self.cfg.target_radius
+
+        trial_start = time.time()
+        action      = None
+        rt          = 0.0
+
+        while True:
+            elapsed = time.time() - trial_start
+            if elapsed >= time_window:
+                rt, action = time_window, "timeout"
+                break
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    engine.record_trial(shape, "timeout", elapsed)
+                    return "quit"
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return "quit"
+                    if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                        rt, action = elapsed, "skip"
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx, my = event.pos
+                    if math.hypot(mx - sx, my - sy) <= radius * 1.3:
+                        rt, action = elapsed, "click"
+
+            if action is not None:
+                break
+
+            # Render calibration frame
+            screen.fill(BG_COLOR)
+            # Calibration header
+            cal_surf = font_large.render("CALIBRATION", True, (200, 180, 80))
+            screen.blit(cal_surf, (self.cfg.window_width // 2 - cal_surf.get_width() // 2, 8))
+            prog_surf = font_small.render(f"Trial {completed + 1} / {total}", True, TEXT_COLOR)
+            screen.blit(prog_surf, (12, 14))
+            rule_surf = font_med.render(f"Click {rule}S", True, RULE_COLOR)
+            screen.blit(rule_surf, (self.cfg.window_width // 2 - rule_surf.get_width() // 2, 44))
+
+            # Timer bar
+            bar_w = self.cfg.window_width - 40
+            ratio = 1.0 - elapsed / time_window
+            bar_color = TIMER_OK if ratio > 0.5 else TIMER_WARN if ratio > 0.25 else TIMER_CRIT
+            pygame.draw.rect(screen, (50, 50, 60), (20, 68, bar_w, 10), border_radius=4)
+            if ratio > 0:
+                pygame.draw.rect(screen, bar_color, (20, 68, int(bar_w * ratio), 10), border_radius=4)
+
+            # Progress bar for calibration
+            prog_frac = completed / max(total, 1)
+            pygame.draw.rect(screen, (30, 50, 30), (20, 82, bar_w, 6), border_radius=3)
+            if prog_frac > 0:
+                pygame.draw.rect(screen, (80, 160, 80), (20, 82, int(bar_w * prog_frac), 6), border_radius=3)
+
+            # Stimulus
+            is_target = (shape == rule)
+            SHAPE_DRAWERS[shape](screen, TARGET_COLOR if is_target else DISTRACT_COLOR, sx, sy, radius)
+            lbl = font_small.render(shape, True, TEXT_COLOR)
+            screen.blit(lbl, (sx - lbl.get_width() // 2, sy + radius + 8))
+
+            hint = font_small.render("Click shape  |  SPACE = skip", True, (80, 80, 90))
+            screen.blit(hint, (self.cfg.window_width // 2 - hint.get_width() // 2, self.cfg.window_height - 28))
+            pygame.display.flip()
+            clock.tick(self.cfg.fps)
+
+        trial = engine.record_trial(shape, action, rt)
+        self._flash_feedback(screen, trial.is_correct, clock)
+        return "ok"
 
     # ------------------------------------------------------------------
     # Trial execution

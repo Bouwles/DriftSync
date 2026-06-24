@@ -102,6 +102,40 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # --- Action: click = 1 ---
     df["action_click"] = (df["action_taken"] == "click").astype(float)
 
+    # --- Rolling RT variance (input inconsistency score) ---
+    rt_series = pd.Series(rt)
+    rt_var    = rt_series.rolling(5, min_periods=1).std().fillna(0.0)
+    iqr = float(np.percentile(rt, 75) - np.percentile(rt, 25)) + 1e-6
+    df["rolling_rt_variance"] = np.clip(rt_var.values / iqr, 0.0, 3.0) / 3.0
+
+    # --- Time since last error (normalised to [0,1], cap at 20 trials) ---
+    is_error  = (~df["is_correct"]).values
+    since_err = np.zeros(n, dtype=float)
+    count     = 20
+    for j in range(n):
+        if is_error[j]:
+            count = 0
+        else:
+            count = min(count + 1, 20)
+        since_err[j] = count
+    df["time_since_last_error_norm"] = since_err / 20.0
+
+    # --- RT trend: linear slope over last 5 trials (positive = slowing) ---
+    rt_vals  = df["reaction_time"].values
+    rt_trend = np.zeros(n, dtype=float)
+    for j in range(n):
+        window = rt_vals[max(0, j - 4): j + 1]
+        if len(window) >= 2:
+            x     = np.arange(len(window), dtype=float)
+            slope = np.polyfit(x, window, 1)[0]
+            rt_trend[j] = slope
+    df["rt_trend"] = np.clip(rt_trend, -1.0, 1.0) / 2.0 + 0.5
+
+    # --- Fatigue index: session time * cumulative error rate ---
+    df["fatigue_index"] = np.clip(
+        df["elapsed_time_norm"].values * df["cumulative_errors_norm"].values, 0.0, 1.0
+    )
+
     return df
 
 

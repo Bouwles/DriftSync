@@ -11,6 +11,9 @@ trial observation at each timestep, and outputs:
 Designed to be decoupled from any GUI so it can be unit-tested.
 """
 
+from __future__ import annotations
+
+
 from collections import deque
 from pathlib import Path
 from typing import Optional, Tuple
@@ -44,6 +47,11 @@ FEATURE_COLS = [
     "streak_incorrect",
     "target_match",
     "action_click",
+    # Extended features (v2)
+    "rolling_rt_variance",
+    "time_since_last_error_norm",
+    "rt_trend",
+    "fatigue_index",
 ]
 
 NUM_FEATURES = len(FEATURE_COLS)
@@ -70,32 +78,32 @@ class RealtimeInferenceEngine:
         self,
         rt_cfg: RealtimeConfig | None = None,
         data_cfg: DataConfig | None = None,
+        baseline=None,
     ):
         self.rt_cfg   = rt_cfg   or CONFIG.realtime
         self.data_cfg = data_cfg or CONFIG.data
+        self.baseline = baseline  # optional BaselineStats for deviation features
 
         self._seq_len = self.data_cfg.sequence_length
         self._device  = get_device(CONFIG.training.device)
 
-        # Rolling buffer: stores raw (un-normalised) per-trial stats
-        # for feature engineering
         self._raw_buffer: deque = deque(maxlen=max(self._seq_len + 20, 50))
-
-        # Feature buffer (normalised): shape (seq_len, NUM_FEATURES)
         self._feat_buffer: deque = deque(maxlen=self._seq_len)
 
-        # Running state for streaming feature computation
-        self._session_start: float = time.time()
-        self._trial_idx: int       = 0
+        self._session_start: float  = time.time()
+        self._trial_idx: int        = 0
         self._prev_timestamp: float = time.time()
-        self._error_history: deque = deque(maxlen=20)
-        self._correct_streak: int  = 0
-        self._error_streak:   int  = 0
+        self._error_history: deque  = deque(maxlen=20)
+        self._correct_streak: int   = 0
+        self._error_streak:   int   = 0
+
+        # Extra state for new features
+        self._rt_history: deque          = deque(maxlen=10)
+        self._trials_since_last_error: int = 20
 
         self.model = None
-        self._mc_samples = 30  # reduced for real-time speed
+        self._mc_samples = 30
 
-        # Log
         self._log: list = []
         self._log_file = Path(self.rt_cfg.log_file)
         self._log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -166,14 +174,16 @@ class RealtimeInferenceEngine:
         self._prev_timestamp = now
         elapsed = now - self._session_start
 
-        # Update streak counters
         if is_correct:
             self._correct_streak += 1
             self._error_streak    = 0
+            self._trials_since_last_error = min(self._trials_since_last_error + 1, 20)
         else:
             self._error_streak   += 1
             self._correct_streak  = 0
+            self._trials_since_last_error = 0
         self._error_history.append(int(not is_correct))
+        self._rt_history.append(reaction_time)
 
         # Compute streaming features
         feats = self._compute_features(
@@ -267,14 +277,37 @@ class RealtimeInferenceEngine:
         target_match = float(stimulus_shape == target_shape)
         action_click = float(action == "click")
 
-        # Store raw RT for future normalisation
-        self._log.append({"rt": reaction_time})  # will duplicate at end of update(); fine
+        self._log.append({"rt": reaction_time})
+
+        # --- Rolling RT variance (inconsistency score) ---
+        rts = list(self._rt_history)
+        if len(rts) >= 2:
+            rt_std = float(np.std(rts))
+            iqr    = float(np.percentile(rts, 75) - np.percentile(rts, 25)) + 1e-6
+            rt_var_norm = float(np.clip(rt_std / iqr, 0.0, 3.0) / 3.0)
+        else:
+            rt_var_norm = 0.0
+
+        # --- Time since last error (normalised, cap 20) ---
+        since_err_norm = float(min(self._trials_since_last_error, 20) / 20.0)
+
+        # --- RT trend over last 5 trials ---
+        if len(rts) >= 3:
+            x     = np.arange(len(rts), dtype=float)
+            slope = float(np.polyfit(x, rts, 1)[0])
+            rt_trend_norm = float(np.clip(slope, -1.0, 1.0) / 2.0 + 0.5)
+        else:
+            rt_trend_norm = 0.5
+
+        # --- Fatigue index ---
+        fatigue = float(np.clip(elapsed_norm * cumulative_err, 0.0, 1.0))
 
         return np.array([
             rt_norm, correctness, elapsed_norm,
             err_rate_5, err_rate_10, iti_norm,
             cumulative_err, streak_c, streak_i,
             target_match, action_click,
+            rt_var_norm, since_err_norm, rt_trend_norm, fatigue,
         ], dtype=np.float32)
 
     # ------------------------------------------------------------------
@@ -287,14 +320,31 @@ class RealtimeInferenceEngine:
             json.dump(self._log, f, indent=2)
         logger.info("Inference log saved -> %s (%d events)", self._log_file, len(self._log))
 
+    def get_live_stats(self) -> dict:
+        """Return current rolling performance stats for explainability."""
+        err_hist = list(self._error_history)
+        rts      = list(self._rt_history)
+        return {
+            "mean_rt_recent":      float(np.mean(rts)) if rts else 1.0,
+            "rolling_acc_10":      float(1.0 - np.mean(err_hist[-10:])) if len(err_hist) >= 10 else 0.8,
+            "rolling_err_rate_5":  float(np.mean(err_hist[-5:]))  if len(err_hist) >= 5  else 0.0,
+            "rolling_err_rate_10": float(np.mean(err_hist[-10:])) if len(err_hist) >= 10 else 0.0,
+            "error_streak":        self._error_streak,
+            "rt_variance":         float(np.std(rts) / (np.percentile(rts, 75) - np.percentile(rts, 25) + 1e-6)) if len(rts) >= 2 else 0.0,
+            "rt_trend":            float(np.polyfit(np.arange(len(rts)), rts, 1)[0]) if len(rts) >= 3 else 0.0,
+            "fatigue_index":       float(min(self._trial_idx / 200.0, 1.0) * (sum(err_hist) / max(self._trial_idx, 1))),
+        }
+
     def reset(self) -> None:
         """Reset internal state for a new session."""
         self._feat_buffer.clear()
         self._raw_buffer.clear()
-        self._session_start  = time.time()
-        self._trial_idx      = 0
-        self._prev_timestamp = time.time()
+        self._session_start           = time.time()
+        self._trial_idx               = 0
+        self._prev_timestamp          = time.time()
         self._error_history.clear()
-        self._correct_streak = 0
-        self._error_streak   = 0
+        self._correct_streak          = 0
+        self._error_streak            = 0
+        self._rt_history.clear()
+        self._trials_since_last_error = 20
         self._log.clear()

@@ -13,6 +13,9 @@ Usage
     python -m driftsync.simulator.headless_generator --sessions 5 --trials 200
 """
 
+from __future__ import annotations
+
+
 import argparse
 import json
 import math

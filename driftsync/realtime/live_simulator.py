@@ -16,18 +16,21 @@ Usage
 """
 
 import argparse
+import json
 import math
 import sys
 import time
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pygame
 
 from driftsync.configs import SimulatorConfig, RealtimeConfig, CONFIG
 from driftsync.simulator.task_engine import TaskEngine
 from driftsync.realtime.inference_engine import RealtimeInferenceEngine
-from driftsync.utils import get_logger
+from driftsync.utils import get_logger, compute_lead_time_metrics
 
 logger = get_logger(__name__)
 
@@ -160,16 +163,45 @@ class LiveDriftSimulator:
         self.sim_cfg   = sim_cfg
         self.rt_cfg    = rt_cfg
         self.engine    = TaskEngine(sim_cfg)
-        self.inference = RealtimeInferenceEngine(rt_cfg, CONFIG.data)
+
+        # Load calibration baseline if available
+        try:
+            from driftsync.ml.calibrator import CalibrationEngine
+            self._baseline = CalibrationEngine.load()
+        except Exception:
+            self._baseline = None
+
+        self.inference = RealtimeInferenceEngine(rt_cfg, CONFIG.data, baseline=self._baseline)
+
+        # Try to load a baseline sklearn model for fallback display
+        try:
+            from driftsync.ml.baseline_models import get_best_available_model
+            self._sklearn_model, self._sklearn_mode = get_best_available_model()
+        except Exception:
+            self._sklearn_model = None
+            self._sklearn_mode  = "threshold"
+
+        # Try to load rule-based explainer
+        try:
+            from driftsync.ml.explainer import RuleBasedExplainer
+            self._explainer = RuleBasedExplainer(self._baseline)
+        except Exception:
+            self._explainer = None
 
         self._prob_history: deque = deque(maxlen=rt_cfg.display_history)
         self._prob_history.append(0.0)
 
-        self._last_prob    = 0.0
-        self._last_unc     = 0.0
-        self._warning_flag = False
-        self._model_type   = model_type
-        self._model_ready  = False
+        self._last_prob      = 0.0
+        self._last_unc       = 0.0
+        self._warning_flag   = False
+        self._model_type     = model_type
+        self._model_ready    = False
+        self._last_feats     = None  # latest feature vector for sklearn model
+        self._explanation    = []    # list of explanation strings
+
+        # Lead time tracking
+        self._warning_events: list = []
+        self._error_events:   list = []
 
     def run(self) -> str:
         """Run live simulator. Returns path to saved session."""
@@ -202,12 +234,14 @@ class LiveDriftSimulator:
             if result == "quit":
                 break
 
-        self._show_outro(screen, font_large, font_med, clock)
+        lead_metrics = compute_lead_time_metrics(self._warning_events, self._error_events)
+        self._show_outro(screen, font_large, font_med, clock, lead_metrics)
         pygame.quit()
 
         path = self.engine.save_session()
         if self._model_ready:
             self.inference.save_log()
+        self._save_session_metrics(str(path), lead_metrics)
         return str(path)
 
     # ------------------------------------------------------------------
@@ -252,6 +286,8 @@ class LiveDriftSimulator:
 
         trial = self.engine.record_trial(shape, action, rt)
 
+        now = time.time()
+
         # Feed to inference engine
         if self._model_ready:
             prob, unc, warn = self.inference.update(
@@ -265,6 +301,34 @@ class LiveDriftSimulator:
             self._last_unc     = unc
             self._warning_flag = warn
             self._prob_history.append(prob)
+
+            # Update last feature vector for sklearn model display
+            feat_buf = list(self.inference._feat_buffer)
+            if feat_buf:
+                self._last_feats = feat_buf[-1]
+        else:
+            # Threshold / sklearn fallback
+            feat_buf = list(self.inference._feat_buffer)
+            if feat_buf:
+                self._last_feats = feat_buf[-1]
+                if self._sklearn_model is not None:
+                    self._last_prob    = self._sklearn_model.predict_proba(feat_buf[-1])
+                    self._warning_flag = self._last_prob >= self.rt_cfg.warning_threshold
+                    self._prob_history.append(self._last_prob)
+
+        # Track warnings and errors for lead time
+        trial_idx = self.engine.trial_count - 1
+        if self._warning_flag:
+            self._warning_events.append({"trial_idx": trial_idx, "timestamp": now, "probability": self._last_prob})
+        if not trial.is_correct:
+            self._error_events.append({"trial_idx": trial_idx, "timestamp": now})
+
+        # Generate explanation when risk is elevated
+        if self._last_prob >= 0.40 and self._explainer is not None:
+            live_stats       = self.inference.get_live_stats()
+            self._explanation = self._explainer.format_panel(live_stats, self._last_prob)
+        elif self._last_prob < 0.35:
+            self._explanation = []
 
         self._flash_feedback(screen, trial.is_correct, clock)
         return "ok"
@@ -323,6 +387,22 @@ class LiveDriftSimulator:
         lbl = font_small.render(shape, True, TEXT_COLOR)
         screen.blit(lbl, (sx - lbl.get_width() // 2, sy + radius + 8))
 
+        # Explanation panel (shown when risk >= 0.40)
+        if self._explanation:
+            exp_y = screen.get_height() - 22 - (len(self._explanation) * 16) - 10
+            bg = pygame.Surface((W - 40, len(self._explanation) * 16 + 8), pygame.SRCALPHA)
+            bg.fill((20, 20, 35, 180))
+            screen.blit(bg, (20, exp_y - 4))
+            for i, line in enumerate(self._explanation):
+                col = GAUGE_HIGH if i == 0 else TEXT_COLOR
+                s = font_small.render(line, True, col)
+                screen.blit(s, (24, exp_y + i * 16))
+
+        # Model mode label
+        mode_lbl = self._sklearn_mode if not self._model_ready else self._model_type.upper()
+        mode_surf = font_small.render(f"Mode: {mode_lbl}", True, (80, 80, 100))
+        screen.blit(mode_surf, (W - mode_surf.get_width() - 8, screen.get_height() - 22))
+
         # Footer
         hint = font_small.render("Click shape  |  SPACE = skip  |  ESC = quit", True, (70, 70, 80))
         screen.blit(hint, (W // 2 - hint.get_width() // 2, screen.get_height() - 22))
@@ -371,22 +451,33 @@ class LiveDriftSimulator:
             pygame.display.flip()
             clock.tick(60)
 
-    def _show_outro(self, screen, font_large, font_med, clock):
+    def _show_outro(self, screen, font_large, font_med, clock, lead_metrics: dict = None):
         trials = self.engine.session_data.trials
-        acc = sum(t.is_correct for t in trials) / max(1, len(trials))
+        acc    = sum(t.is_correct for t in trials) / max(1, len(trials))
         avg_rt = sum(t.reaction_time for t in trials) / max(1, len(trials))
-        W, H = screen.get_size()
+        W, H   = screen.get_size()
+        lm     = lead_metrics or {}
+
+        predicted  = lm.get("n_predicted_before", 0)
+        missed     = lm.get("n_missed", 0)
+        avg_lead   = lm.get("avg_lead_time_s", 0.0)
+        fp_warns   = lm.get("false_positive_warnings", 0)
+
         lines = [
             ("Session Complete!", font_large, RULE_COLOR),
             ("", font_med, TEXT_COLOR),
             (f"Trials: {len(trials)}   Accuracy: {acc:.1%}   Avg RT: {avg_rt:.3f}s", font_med, TEXT_COLOR),
             ("", font_med, TEXT_COLOR),
-            ("Data and inference log saved.", font_med, (160, 200, 160)),
+            ("Prediction Lead Time", font_med, (100, 220, 255)),
+            (f"Errors predicted early: {predicted}   Missed: {missed}", font_med, TEXT_COLOR),
+            (f"Avg lead time: {avg_lead:.2f}s   False warnings: {fp_warns}", font_med, TEXT_COLOR),
+            ("", font_med, TEXT_COLOR),
+            ("Data and session metrics saved.", font_med, (160, 200, 160)),
             ("Press ENTER or close window.", font_med, TEXT_COLOR),
         ]
         t0 = time.time()
         waiting = True
-        while waiting and time.time() - t0 < 10:
+        while waiting and time.time() - t0 < 15:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return
@@ -401,6 +492,29 @@ class LiveDriftSimulator:
                 y += fnt.get_height() + 4
             pygame.display.flip()
             clock.tick(60)
+
+    def _save_session_metrics(self, session_path: str, lead_metrics: dict) -> None:
+        """Save session summary including lead time metrics to JSON."""
+        trials  = self.engine.session_data.trials
+        acc     = sum(t.is_correct for t in trials) / max(1, len(trials))
+        avg_rt  = sum(t.reaction_time for t in trials) / max(1, len(trials))
+        summary = {
+            "session_id":    self.engine.session_id,
+            "session_path":  session_path,
+            "timestamp":     datetime.now().isoformat(),
+            "n_trials":      len(trials),
+            "accuracy":      round(acc, 4),
+            "avg_rt":        round(avg_rt, 4),
+            "model_mode":    self._model_type if self._model_ready else self._sklearn_mode,
+            "calibrated":    self._baseline is not None,
+            **lead_metrics,
+        }
+        out_dir = Path("driftsync/sessions")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"metrics_{self.engine.session_id}.json"
+        with open(out_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        logger.info("Session metrics saved -> %s", out_path)
 
 
 # ---------------------------------------------------------------------------

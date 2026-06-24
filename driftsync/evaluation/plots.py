@@ -11,6 +11,9 @@ All publication-quality plots for DriftSync experiments:
   - Inference speed bar chart
 """
 
+from __future__ import annotations
+
+
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 

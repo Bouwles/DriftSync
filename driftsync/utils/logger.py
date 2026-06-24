@@ -7,9 +7,10 @@ Structured console and file logging for DriftSync.
 import logging
 import sys
 from pathlib import Path
+from typing import Optional
 
 
-def get_logger(name: str, log_file: str | None = None, level: int = logging.INFO) -> logging.Logger:
+def get_logger(name: str, log_file: Optional[str] = None, level: int = logging.INFO) -> logging.Logger:
     """
     Create and configure a logger with consistent formatting.
 
