@@ -222,8 +222,8 @@ class LiveDriftSimulator:
             logger.info("Model loaded — live inference active.")
         except FileNotFoundError:
             logger.warning(
-                "No trained model found. Running without inference. "
-                "Train a model first: python -m driftsync.training.pipeline"
+                "No trained model found. Running the task without live risk scoring. "
+                "Train quickly with: python run_experiment.py --quick"
             )
 
         self._show_intro(screen, font_large, font_med, clock)
@@ -378,7 +378,11 @@ class LiveDriftSimulator:
             # Sparkline
             draw_sparkline(screen, self._prob_history, W - 210, 75, 190, 50)
         else:
-            no_model = font_small.render("(no model — train first)", True, (100, 100, 110))
+            no_model = font_small.render(
+                "(no checkpoint - run: python run_experiment.py --quick)",
+                True,
+                (120, 128, 142),
+            )
             screen.blit(no_model, (20, 78))
 
         # Stimulus
@@ -422,7 +426,11 @@ class LiveDriftSimulator:
 
     def _show_intro(self, screen, font_large, font_med, clock):
         W, H = screen.get_size()
-        model_status = f"Model: {self._model_type.upper()}" if self._model_ready else "No model loaded"
+        model_status = (
+            f"Model: {self._model_type.upper()}"
+            if self._model_ready
+            else "No checkpoint loaded - task recording only"
+        )
         lines = [
             ("DriftSync — Live Inference Mode", font_large, RULE_COLOR),
             ("", font_med, TEXT_COLOR),
