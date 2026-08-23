@@ -1,0 +1,22 @@
+[project]
+name = "driftsync"
+version = "2.1.0"
+description = "Real-time cognitive drift prediction for human error risk."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "torch>=2.0.0",
+  "numpy>=1.24.0",
+  "matplotlib>=3.7.0",
+  "scikit-learn>=1.3.0",
+  "pygame>=2.5.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-q"
