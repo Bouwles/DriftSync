@@ -33,3 +33,19 @@ def test_build_sequences_does_not_cross_session_boundaries():
 
     assert X.shape == (6, 4, len(FEATURE_COLS))
     assert y.shape == (6,)
+
+
+def test_split_data_preserves_chronological_order_and_ratios():
+    X = np.arange(20 * 2 * 3, dtype=np.float32).reshape(20, 2, 3)
+    y = np.arange(20, dtype=np.int32)
+
+    (X_train, y_train), (X_val, y_val), (X_test, y_test) = split_data(
+        X, y, train_ratio=0.60, val_ratio=0.20
+    )
+
+    assert len(X_train) == 12
+    assert len(X_val) == 4
+    assert len(X_test) == 4
+    np.testing.assert_array_equal(y_train, np.arange(0, 12))
+    np.testing.assert_array_equal(y_val, np.arange(12, 16))
+    np.testing.assert_array_equal(y_test, np.arange(16, 20))
