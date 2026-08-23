@@ -1315,7 +1315,7 @@ class DriftSyncApplication:
         self._btn_results_open.draw(self.screen)
 
         if not self.result_runs:
-            draw_text(self.screen, "No ML runs found. Run the Full Demo first.",
+            draw_text(self.screen, "No ML results yet. Run Full Demo or `python run_experiment.py --quick`.",
                       self.f_body, DIM, cx + 20, oy + 30)
             return
 
@@ -1338,7 +1338,9 @@ class DriftSyncApplication:
         oy += 8
 
         if not self.result_thumbs:
-            draw_text(self.screen, "No plots in this run.", self.f_body, DIM, cx + 20, oy + 20)
+            draw_text(self.screen, "This run has metrics but no plots yet.", self.f_body, DIM, cx + 20, oy + 20)
+            draw_text(self.screen, "Generate plots from Full Demo or rerun the experiment pipeline.",
+                      self.f_small, DIM, cx + 20, oy + 44)
             return
 
         tw, th = 290, 196
@@ -1424,7 +1426,8 @@ class DriftSyncApplication:
 
         if not self.human_sessions:
             draw_text(self.screen, "No human sessions found.", self.f_body, TEXT, cx + 20, oy + 20)
-            draw_text(self.screen, "Play the Task to record sessions.", self.f_small, DIM, cx + 20, oy + 44)
+            draw_text(self.screen, "Use Play Task to record a session, then refresh this view.",
+                      self.f_small, DIM, cx + 20, oy + 44)
             return
 
         cols_x = [cx + 12, cx + 44, cx + 220, cx + 390, cx + 456, cx + 534]
