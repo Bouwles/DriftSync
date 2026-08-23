@@ -1,0 +1,40 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Packaging and PyInstaller output
+build/
+dist/
+*.egg-info/
+*.egg
+
+# DriftSync generated datasets and model artifacts
+driftsync/data/raw/
+driftsync/data/processed/
+driftsync/data/realtime_log.json
+driftsync/results/checkpoints/
+driftsync/results/*.log
+driftsync/results/*.png
+
+# Local notebooks and editor files
+.ipynb_checkpoints/
+*.ipynb
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
