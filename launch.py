@@ -24,7 +24,7 @@ import importlib
 # Ensure we're in the right directory (DriftSync project root)
 # ---------------------------------------------------------------------------
 if getattr(sys, "frozen", False):
-    # Running inside a PyInstaller bundle — __file__ points to the temp
+    # Running inside a PyInstaller bundle; __file__ points to the temp
     # extraction folder.  Use the directory that contains the .exe instead.
     SCRIPT_DIR = os.path.dirname(sys.executable)
 else:
@@ -38,11 +38,11 @@ if SCRIPT_DIR not in sys.path:
 # Required packages: (import_name, pip_package, description)
 # ---------------------------------------------------------------------------
 REQUIRED = [
-    ("numpy",      "numpy>=1.24.0",       "NumPy  — numerical computing"),
-    ("sklearn",    "scikit-learn>=1.3.0", "Scikit-learn — metrics & ML utilities"),
-    ("matplotlib", "matplotlib>=3.7.0",   "Matplotlib — plot generation"),
-    ("torch",      "torch",               "PyTorch — deep learning framework"),
-    ("pygame",     "pygame>=2.5.0",       "Pygame — interactive GUI"),
+    ("numpy",      "numpy>=1.24.0",       "NumPy - numerical computing"),
+    ("sklearn",    "scikit-learn>=1.3.0", "Scikit-learn - metrics and ML utilities"),
+    ("matplotlib", "matplotlib>=3.7.0",   "Matplotlib - plot generation"),
+    ("torch",      "torch",               "PyTorch - deep learning framework"),
+    ("pygame",     "pygame>=2.5.0",       "Pygame - interactive GUI"),
 ]
 
 
@@ -95,7 +95,7 @@ def ensure_dependencies() -> bool:
 
     print()
     print("=" * 60)
-    print("  DriftSync — First-time Setup")
+    print("  DriftSync - First-time Setup")
     print("=" * 60)
     print(f"  {len(missing)} package(s) need to be installed:")
     for _, _, label in missing:
@@ -145,14 +145,14 @@ def main() -> None:
     print("  DriftSync: Real-Time Cognitive Drift Prediction")
     print()
 
-    # When running as a PyInstaller bundle all packages are already included —
+    # When running as a PyInstaller bundle all packages are already included;
     # skip the pip installer completely (sys.executable is the .exe, not python).
     if not getattr(sys, "frozen", False):
         if not ensure_dependencies():
-            print("Cannot start — dependency installation failed.")
+            print("Cannot start - dependency installation failed.")
             sys.exit(1)
 
-    # All deps available — launch the application
+    # All deps available; launch the application
     try:
         from driftsync.app.application import DriftSyncApplication
     except ImportError as e:
