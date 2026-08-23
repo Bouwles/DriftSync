@@ -166,6 +166,7 @@ Live predictions are saved as JSON events when a trained model is available. See
 - [Contributing](CONTRIBUTING.md)
 - [Generated artifact policy](docs/generated-artifacts.md)
 - [Demo readiness checklist](docs/demo-checklist.md)
+- [Model card](docs/model-card.md)
 - [Realtime log schema](docs/realtime-log-schema.md)
 
 ## Verification
