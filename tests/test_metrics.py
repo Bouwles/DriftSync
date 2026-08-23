@@ -35,3 +35,15 @@ def test_roc_curve_returns_zero_auc_for_single_class():
     _, _, auc = compute_roc_curve(y_true, y_pred)
 
     assert auc == 0.0
+
+
+def test_roc_curve_single_class_does_not_warn(recwarn):
+    y_true = np.ones(3, dtype=int)
+    y_pred = np.array([0.2, 0.5, 0.8])
+
+    fpr, tpr, auc = compute_roc_curve(y_true, y_pred)
+
+    assert len(recwarn) == 0
+    np.testing.assert_array_equal(fpr, np.array([0.0, 1.0]))
+    np.testing.assert_array_equal(tpr, np.array([0.0, 1.0]))
+    assert auc == 0.0

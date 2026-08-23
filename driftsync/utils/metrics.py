@@ -94,8 +94,11 @@ def compute_roc_curve(
     Returns:
         (fpr, tpr, auc_value)
     """
+    if len(np.unique(y_true)) <= 1:
+        return np.array([0.0, 1.0]), np.array([0.0, 1.0]), 0.0
+
     fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
-    auc = roc_auc_score(y_true, y_pred_proba) if len(np.unique(y_true)) > 1 else 0.0
+    auc = roc_auc_score(y_true, y_pred_proba)
     return fpr, tpr, float(auc)
 
 
