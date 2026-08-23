@@ -5,7 +5,6 @@
 [![Tests](https://github.com/Bouwles/DriftSync/actions/workflows/tests.yml/badge.svg)](https://github.com/Bouwles/DriftSync/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white)
-![Status](https://img.shields.io/badge/status-showcase%20ready-58a6ff)
 
 DriftSync is an end-to-end machine learning system that predicts when a person is likely to make a mistake before the mistake happens. It watches behavioral signals from a sustained-attention task, turns them into temporal feature windows, and estimates the probability of an error in the next few trials.
 
@@ -36,17 +35,6 @@ Default values:
 | `K` | Prediction horizon | 5 trials |
 | Features | Behavioral inputs per trial | 15 |
 | Warning threshold | Risk level that triggers warning | 0.65 |
-
-## What Makes This Showcase-Worthy
-
-- Full interactive Pygame application, not just a notebook.
-- Synthetic data generator, preprocessing, training, evaluation, realtime inference, and results UI.
-- LSTM and Transformer sequence models with Monte Carlo Dropout uncertainty.
-- Logistic Regression, Random Forest, and threshold fallback paths for graceful demos.
-- Per-user calibration baseline for personalized explanations.
-- Lead-time tracking: warnings are judged by whether they arrive before errors.
-- Automated tests and CI for core behavior.
-- README media generated from the project workflow.
 
 ## System Flow
 
