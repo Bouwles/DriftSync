@@ -99,6 +99,7 @@ class RealtimeInferenceEngine:
 
         # Extra state for new features
         self._rt_history: deque          = deque(maxlen=10)
+        self._rt_norm_history: deque     = deque(maxlen=20)
         self._trials_since_last_error: int = 20
 
         self.model = None
@@ -247,7 +248,7 @@ class RealtimeInferenceEngine:
         Compute the feature vector for one trial using running statistics.
         """
         # Reaction time: normalise using historical median / IQR if available
-        all_rts = [e.get("rt", reaction_time) for e in self._log[-20:]]
+        all_rts = list(self._rt_norm_history)
         all_rts.append(reaction_time)
         median_rt = float(np.median(all_rts))
         iqr_rt    = float(np.percentile(all_rts, 75) - np.percentile(all_rts, 25)) + 1e-6
@@ -277,7 +278,7 @@ class RealtimeInferenceEngine:
         target_match = float(stimulus_shape == target_shape)
         action_click = float(action == "click")
 
-        self._log.append({"rt": reaction_time})
+        self._rt_norm_history.append(reaction_time)
 
         # --- Rolling RT variance (inconsistency score) ---
         rts = list(self._rt_history)
@@ -346,5 +347,6 @@ class RealtimeInferenceEngine:
         self._correct_streak          = 0
         self._error_streak            = 0
         self._rt_history.clear()
+        self._rt_norm_history.clear()
         self._trials_since_last_error = 20
         self._log.clear()
