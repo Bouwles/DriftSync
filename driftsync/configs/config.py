@@ -44,18 +44,25 @@ class DataConfig:
         "reaction_time_norm",
         "correctness",
         "elapsed_time_norm",
-        "rolling_error_rate",
+        "rolling_error_rate_5",
+        "rolling_error_rate_10",
         "inter_trial_interval_norm",
         "cumulative_errors_norm",
         "streak_correct",
         "streak_incorrect",
+        "target_match",
+        "action_click",
+        "rolling_rt_variance",
+        "time_since_last_error_norm",
+        "rt_trend",
+        "fatigue_index",
     ])
 
 
 @dataclass
 class LSTMConfig:
     """Configuration for LSTM model."""
-    input_dim: int = 8
+    input_dim: int = 15
     hidden_dim: int = 128
     num_layers: int = 3
     dropout: float = 0.3
@@ -69,7 +76,7 @@ class LSTMConfig:
 @dataclass
 class TransformerConfig:
     """Configuration for Transformer model."""
-    input_dim: int = 8
+    input_dim: int = 15
     d_model: int = 128
     nhead: int = 8
     num_encoder_layers: int = 4
