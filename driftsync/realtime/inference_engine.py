@@ -26,6 +26,7 @@ import torch
 from driftsync.configs import RealtimeConfig, DataConfig, CONFIG
 from driftsync.models import build_model
 from driftsync.data.preprocessing import engineer_features
+from driftsync.realtime.checkpoints import resolve_checkpoint_path
 from driftsync.utils import get_logger, get_device
 
 logger = get_logger(__name__)
@@ -121,19 +122,7 @@ class RealtimeInferenceEngine:
             model_type: "lstm" or "transformer". Defaults to rt_cfg.model_type.
         """
         model_type = model_type or self.rt_cfg.model_type
-        ckpt_dir   = Path(self.rt_cfg.checkpoint_dir)
-
-        name_map = {
-            "lstm":        "lstm_best.pt",
-            "transformer": "transformer_best.pt",
-        }
-        ckpt_path = ckpt_dir / name_map[model_type]
-
-        if not ckpt_path.exists():
-            raise FileNotFoundError(
-                f"No checkpoint found at {ckpt_path}. "
-                "Run training first: python -m driftsync.training.pipeline --model {model_type}"
-            )
+        ckpt_path = resolve_checkpoint_path(model_type, self.rt_cfg.checkpoint_dir)
 
         ckpt = torch.load(ckpt_path, map_location=self._device, weights_only=False)
         model_cfg = CONFIG.lstm if model_type == "lstm" else CONFIG.transformer
