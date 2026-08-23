@@ -35,3 +35,27 @@ def test_timeout_on_target_shape_is_incorrect():
 
     assert trial.is_correct is False
     assert engine.session_data.trials[-1] == trial
+
+
+def test_next_stimulus_stays_inside_playable_bounds():
+    cfg = SimulatorConfig(window_width=900, window_height=650, target_radius=30, num_trials=40)
+    engine = TaskEngine(cfg)
+
+    for _ in range(25):
+        stimulus = engine.next_stimulus()
+        assert 80 <= stimulus["x"] <= cfg.window_width - 80
+        assert 140 <= stimulus["y"] <= cfg.window_height - 80
+        assert cfg.min_reaction_window <= stimulus["time_window"] <= cfg.max_reaction_window
+        engine.record_trial(stimulus["shape"], "skip", 0.2)
+
+
+def test_rule_changes_to_a_different_shape_at_interval():
+    engine = make_engine(num_trials=45)
+    first_rule = engine.active_rule
+
+    for _ in range(20):
+        engine.record_trial(first_rule, "click", 0.2)
+
+    stimulus = engine.next_stimulus()
+
+    assert stimulus["rule"] != first_rule
