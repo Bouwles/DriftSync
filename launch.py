@@ -64,6 +64,17 @@ def _pip_install(pip_spec: str, label: str) -> bool:
         return False
 
 
+def find_missing_dependencies(required=REQUIRED) -> list[tuple[str, str, str]]:
+    """Return required packages whose import names are unavailable."""
+    missing = []
+    for import_name, pip_spec, label in required:
+        try:
+            importlib.import_module(import_name)
+        except ImportError:
+            missing.append((import_name, pip_spec, label))
+    return missing
+
+
 def ensure_dependencies() -> bool:
     """
     Check all required packages; install missing ones.
@@ -72,12 +83,7 @@ def ensure_dependencies() -> bool:
         True if all packages are available (or were successfully installed).
         False if any installation failed.
     """
-    missing = []
-    for import_name, pip_spec, label in REQUIRED:
-        try:
-            importlib.import_module(import_name)
-        except ImportError:
-            missing.append((import_name, pip_spec, label))
+    missing = find_missing_dependencies()
 
     if not missing:
         return True
