@@ -507,7 +507,7 @@ class DriftSimulator:
             (f"Overall accuracy : {acc:.1%}", font_med, SCORE_COLOR),
             (f"Avg reaction time: {avg_rt:.3f}s", font_med, SCORE_COLOR),
             ("", font_med, TEXT_COLOR),
-            ("Data saved. Press ENTER or close window.", font_med, (160, 160, 200)),
+            ("Session complete. Press ENTER to save and return.", font_med, (160, 160, 200)),
         ]
         self._render_text_screen(screen, lines, clock, wait_key=pygame.K_RETURN, timeout=8.0)
 
