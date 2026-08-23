@@ -160,6 +160,14 @@ DriftSync/
 
 Live predictions are saved as JSON events when a trained model is available. See [docs/realtime-log-schema.md](docs/realtime-log-schema.md).
 
+## Project Docs
+
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Generated artifact policy](docs/generated-artifacts.md)
+- [Demo readiness checklist](docs/demo-checklist.md)
+- [Realtime log schema](docs/realtime-log-schema.md)
+
 ## Verification
 
 Current local verification commands:
