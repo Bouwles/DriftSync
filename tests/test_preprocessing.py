@@ -59,3 +59,21 @@ def test_engineered_features_capture_expected_behavior():
     assert engineered.loc[3, "streak_incorrect"] == 0.05
     assert engineered.loc[6, "target_match"] == 0.0
     assert engineered.loc[4, "action_click"] == 1.0
+
+
+def test_target_label_marks_errors_in_future_horizon_only():
+    df = sample_trials()
+
+    labeled = add_target_label(df, horizon=2)
+
+    assert labeled["label"].tolist() == [0, 1, 1, 0, 1, 1]
+    assert labeled["trial_idx"].tolist() == [0, 1, 2, 3, 4, 5]
+
+
+def test_target_label_drops_rows_without_future_context():
+    df = sample_trials()
+
+    labeled = add_target_label(df, horizon=3)
+
+    assert len(labeled) == len(df) - 3
+    assert labeled["trial_idx"].iloc[-1] == 4
