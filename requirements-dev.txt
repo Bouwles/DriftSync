@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Developer verification
+pytest>=8.0.0
