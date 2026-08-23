@@ -25,8 +25,6 @@ Binary label: did any error occur within the next K trials?
 
 import numpy as np
 import pandas as pd
-from typing import Tuple
-from sklearn.preprocessing import RobustScaler
 
 from driftsync.utils import get_logger
 

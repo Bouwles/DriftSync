@@ -21,9 +21,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 from typing import Tuple, List, Optional
-import pickle
 
-from driftsync.configs import DataConfig
 from driftsync.utils import get_logger
 
 logger = get_logger(__name__)

@@ -25,7 +25,6 @@ import torch
 
 from driftsync.configs import RealtimeConfig, DataConfig, CONFIG
 from driftsync.models import build_model
-from driftsync.data.preprocessing import engineer_features
 from driftsync.realtime.checkpoints import resolve_checkpoint_path
 from driftsync.utils import get_logger, get_device
 
