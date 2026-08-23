@@ -52,3 +52,13 @@ def test_save_log_writes_clean_event_schema(tmp_path):
     assert events[0]["probability"] == pytest.approx(0.72)
     assert events[0]["warning"] is True
     assert "rt" not in events[0]
+
+
+def test_sample_realtime_log_fixture_matches_schema():
+    fixture = json.loads(open("tests/fixtures/realtime_log_sample.json", encoding="utf-8").read())
+    expected_keys = {"trial_idx", "timestamp", "probability", "uncertainty", "warning", "is_correct"}
+
+    assert fixture
+    assert all(set(event) == expected_keys for event in fixture)
+    assert all(0.0 <= event["probability"] <= 1.0 for event in fixture)
+    assert all(isinstance(event["warning"], bool) for event in fixture)
