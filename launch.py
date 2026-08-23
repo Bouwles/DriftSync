@@ -5,7 +5,7 @@ Single entry point for the DriftSync application.
 
 This script:
 1. Checks for required Python packages.
-2. Installs any missing ones automatically via pip.
+2. Prints a clear install command if packages are missing.
 3. Launches the full interactive Pygame GUI application.
 
 Usage
@@ -75,6 +75,11 @@ def find_missing_dependencies(required=REQUIRED) -> list[tuple[str, str, str]]:
     return missing
 
 
+def auto_install_dependencies() -> bool:
+    """Whether missing packages should be installed automatically."""
+    return os.environ.get("DRIFTSYNC_AUTO_INSTALL", "").strip().lower() in {"1", "true", "yes"}
+
+
 def ensure_dependencies() -> bool:
     """
     Check all required packages; install missing ones.
@@ -101,6 +106,15 @@ def ensure_dependencies() -> bool:
         print("  NOTE: PyTorch may take several minutes to download.")
         print("  Please be patient...")
         print()
+
+    if not auto_install_dependencies():
+        print("  Install them with:")
+        print("    python -m pip install -r requirements.txt")
+        print()
+        print("  To let the launcher install them automatically, set:")
+        print("    DRIFTSYNC_AUTO_INSTALL=1")
+        print("=" * 60)
+        return False
 
     all_ok = True
     for import_name, pip_spec, label in missing:
