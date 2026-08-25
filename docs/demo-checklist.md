@@ -7,6 +7,7 @@ Use this before sharing DriftSync as portfolio work.
 - [ ] `python -m pytest`
 - [ ] `python -m driftsync.smoke`
 - [ ] `python scripts/generate_showcase_assets.py`
+- [ ] `python scripts/build_showcase_bundle.py`
 - [ ] Confirm `git status --short` only shows intentional changes.
 
 ## Demo Path
@@ -16,6 +17,7 @@ Use this before sharing DriftSync as portfolio work.
 - [ ] Run or show the Full Demo path.
 - [ ] Open Results and confirm model/session evidence is visible.
 - [ ] Launch Live Mode after a model has been trained, or explain the fallback path.
+- [ ] Show `driftsync/results/showcase_bundle/replay-report.md` as proof of replay/report output.
 
 ## README
 

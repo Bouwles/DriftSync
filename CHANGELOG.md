@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-25 - Showcase v3
+
+- Added replay timeline generation that merges task sessions with realtime prediction logs.
+- Added Markdown replay reports for warnings, actual errors, uncertainty, and explanation notes.
+- Added named simulator scenarios for repeatable portfolio demos.
+- Added a one-command showcase bundle generator.
+- Added tests for replay reports, scenario presets, and bundle generation.
+
 ## 2026-08-23 - Showcase Polish
 
 - Added pytest coverage for task logic, preprocessing, sequence extraction, metrics, realtime inference, checkpoint resolution, launcher behavior, and smoke checks.

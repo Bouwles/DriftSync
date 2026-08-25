@@ -103,6 +103,7 @@ Useful commands:
 make test        # run pytest
 make smoke       # check core package contracts
 make quick-demo  # run a short synthetic training/evaluation pass
+make showcase-bundle  # generate replay report + showcase bundle
 make launch      # open the Pygame application
 ```
 
@@ -148,6 +149,23 @@ DriftSync/
 
 Live predictions are saved as JSON events when a trained model is available. See [docs/realtime-log-schema.md](docs/realtime-log-schema.md).
 
+## Showcase Replay Bundle
+
+DriftSync can generate a shareable replay bundle that merges a task session with realtime risk predictions:
+
+```bash
+python scripts/build_showcase_bundle.py
+```
+
+The bundle includes a replay timeline JSON, a Markdown replay report, and sample session data under `driftsync/results/showcase_bundle/`. It is designed for portfolio review: warnings, errors, peak risk, uncertainty, and explanation notes are visible without launching the app.
+
+For repeatable live demos, use named scenarios:
+
+```bash
+python -m driftsync.realtime.live_simulator --scenario fatigue_drift --trials 80
+python -m driftsync.realtime.live_simulator --scenario sudden_overload --trials 40
+```
+
 ## Project Docs
 
 - [Changelog](CHANGELOG.md)
@@ -155,7 +173,9 @@ Live predictions are saved as JSON events when a trained model is available. See
 - [Generated artifact policy](docs/generated-artifacts.md)
 - [Demo readiness checklist](docs/demo-checklist.md)
 - [Model card](docs/model-card.md)
+- [Replay reports](docs/replay-reports.md)
 - [Realtime log schema](docs/realtime-log-schema.md)
+- [Scenario presets](docs/scenario-presets.md)
 
 ## Verification
 
@@ -165,6 +185,7 @@ Current local verification commands:
 python -m pytest
 python -m driftsync.smoke
 python scripts/generate_showcase_assets.py
+python scripts/build_showcase_bundle.py
 ```
 
 ## Limitations
@@ -181,6 +202,7 @@ python scripts/generate_showcase_assets.py
 - Add an API mode for embedding DriftSync in other applications.
 - Add online adaptation from a user's own history.
 - Compare longer prediction horizons such as `K=10` and `K=15`.
+- Add an interactive GUI replay player for saved sessions.
 
 ---
 

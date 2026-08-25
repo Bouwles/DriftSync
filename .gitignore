@@ -25,6 +25,7 @@ driftsync/data/raw/
 driftsync/data/processed/
 driftsync/data/realtime_log.json
 driftsync/results/checkpoints/
+driftsync/results/showcase_bundle/
 driftsync/results/*.log
 driftsync/results/*.png
 

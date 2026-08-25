@@ -29,6 +29,7 @@ import pygame
 
 from driftsync.configs import SimulatorConfig, RealtimeConfig, CONFIG
 from driftsync.simulator.task_engine import TaskEngine
+from driftsync.simulator.scenarios import SCENARIOS, apply_scenario
 from driftsync.realtime.inference_engine import RealtimeInferenceEngine
 from driftsync.utils import get_logger, compute_lead_time_metrics
 
@@ -529,14 +530,23 @@ class LiveDriftSimulator:
 # CLI
 # ---------------------------------------------------------------------------
 
+def build_simulator_config(num_trials: int, scenario: str | None = None) -> SimulatorConfig:
+    """Build the live simulator config, optionally applying a showcase scenario."""
+    cfg = SimulatorConfig(num_trials=num_trials)
+    if scenario:
+        cfg = apply_scenario(scenario, cfg)
+    return cfg
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run DriftSync live inference simulator.")
     parser.add_argument("--model", type=str, default="lstm", choices=["lstm", "transformer"])
     parser.add_argument("--trials", type=int, default=150)
     parser.add_argument("--threshold", type=float, default=None)
+    parser.add_argument("--scenario", type=str, default=None, choices=sorted(SCENARIOS))
     args = parser.parse_args()
 
-    sim_cfg = SimulatorConfig(num_trials=args.trials)
+    sim_cfg = build_simulator_config(args.trials, args.scenario)
     rt_cfg  = RealtimeConfig(model_type=args.model)
     if args.threshold is not None:
         rt_cfg.warning_threshold = args.threshold

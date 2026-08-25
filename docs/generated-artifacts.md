@@ -12,6 +12,7 @@ These are reproducible or environment-specific and are ignored by `.gitignore`:
 - `driftsync/data/processed/`
 - `driftsync/data/realtime_log.json`
 - `driftsync/results/checkpoints/`
+- `driftsync/results/showcase_bundle/`
 - `driftsync/results/*.log`
 - `driftsync/results/*.png`
 - `__pycache__/`
