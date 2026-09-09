@@ -207,3 +207,7 @@ python scripts/build_showcase_bundle.py
 ---
 
 Built to show the full loop: simulation, sequence modeling, realtime prediction, uncertainty, explainability, and evidence.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
