@@ -12,6 +12,29 @@ This is a research and portfolio project, not a medical device. It is not clinic
 
 ![DriftSync desktop workspace](docs/assets/driftsync-workspace.png)
 
+## Download for Windows
+
+[Download DriftSync v2.2.0 for Windows x64](https://github.com/Bouwles/DriftSync/releases/download/v2.2.0/DriftSync-v2.2.0-windows-x64.zip).
+Extract the **entire ZIP**, then open `DriftSync.exe` in the extracted folder. Keep
+`_internal` beside the executable. Python is included; no separate installation is
+needed. The version appears in the sidebar so you can confirm you opened the new app.
+
+This package includes the redesigned workspace and Mathematics section. Use **Train
+models** before live predictions; task recording and Mathematics work immediately.
+Local recordings and pretrained checkpoints are not bundled. Keep previous recordings
+when upgrading. See [the release notes](https://github.com/Bouwles/DriftSync/releases/tag/v2.2.0)
+for the checksum and changes.
+
+## Explore the Mathematics
+
+Open **Mathematics** in the sidebar or press **Alt+7**. Five interactive pages explain
+prediction targets, behavioural features, sequence models, uncertainty and learning.
+Properly typeset equations sit alongside worked examples: toggle future outcomes,
+compare LSTM and Transformer architectures, adjust dropout spread, and explore loss.
+Examples are explicitly illustrative and name their implementing source files.
+
+![DriftSync Mathematics workspace](docs/assets/driftsync-mathematics.png)
+
 ## Live Demo
 
 The live workspace separates the attention task from its analysis panel. It shows error risk, MC-dropout uncertainty, recent outcomes and an inspectable prediction timeline. Predictions begin once the sequence window is full; missing checkpoints and warm-up are explicitly labeled. Calibrated prediction confidence is not available and is never inferred from uncertainty.
@@ -20,7 +43,7 @@ The live workspace separates the attention task from its analysis panel. It show
 
 This UI preview renders the two events in the checked-in replay fixture; it is not a live human session. The task area preserves the existing stimulus positions and response rules.
 
-The desktop interface supports resizing, F11 fullscreen, Tab/Enter controls, and Alt+1–6 navigation. See [the interface guide](docs/interface.md) for controls and measurement definitions.
+The desktop interface supports resizing, F11 fullscreen, Tab/Enter controls, and Alt+1–7 navigation. See [the interface guide](docs/interface.md) for controls and measurement definitions.
 
 ## Why It Matters
 

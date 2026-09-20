@@ -57,6 +57,9 @@ FEATURE_COLS = [
 NUM_FEATURES = len(FEATURE_COLS)
 
 
+MC_DROPOUT_SAMPLES = 30
+
+
 class RealtimeInferenceEngine:
     """
     Streaming inference engine for cognitive drift prediction.
@@ -103,7 +106,7 @@ class RealtimeInferenceEngine:
         self._trials_since_last_error: int = 20
 
         self.model = None
-        self._mc_samples = 30
+        self._mc_samples = MC_DROPOUT_SAMPLES
 
         self._log: list = []
         self._log_file = Path(self.rt_cfg.log_file)

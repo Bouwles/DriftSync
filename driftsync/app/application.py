@@ -22,7 +22,8 @@ from typing import List, Optional, Tuple
 import pygame
 
 
-from driftsync import ui
+from driftsync import ui, __version__
+from driftsync.app.mathematics import MathematicsView
 
 
 class State(Enum):
@@ -33,6 +34,7 @@ class State(Enum):
     RESULTS   = auto()
     PLAY_TASK = auto()
     LIVE_MODE = auto()
+    MATHEMATICS = auto()
 
 
 BG, PANEL, PANEL2, BORDER = ui.BG, ui.PANEL, ui.PANEL2, ui.BORDER
@@ -532,6 +534,7 @@ class DriftSyncApplication:
         self.state        = State.MENU
         self.splash_start = time.time()
         self.learn_page   = 0
+        self.math_view = MathematicsView()
         self.running      = True
 
         self.demo_worker       = DemoWorker()
@@ -611,7 +614,7 @@ class DriftSyncApplication:
         draw_text(self.screen, "Focus analysis", self.f_small, DIM, 20, 62)
         nav = [("Workspace", State.MENU), ("Live session", State.LIVE_MODE),
                ("Record task", State.PLAY_TASK), ("Train models", State.DEMO),
-               ("Results", State.RESULTS), ("Field guide", State.LEARN)]
+               ("Results", State.RESULTS), ("Field guide", State.LEARN), ("Mathematics", State.MATHEMATICS)]
         self._nav_rects = []
         for i, (label, target) in enumerate(nav):
             rect = pygame.Rect(12, 120 + i * 48, SIDEBAR_W - 24, 40)
@@ -624,10 +627,10 @@ class DriftSyncApplication:
                       rect.x + 12, rect.centery, "midleft")
             self._nav_rects.append((rect, target))
         hline(self.screen, H - 142, 20, SIDEBAR_W - 20)
-        draw_text(self.screen, "Research workspace", self.f_small, DIM, 20, H - 124)
+        draw_text(self.screen, f"DriftSync {__version__}", self.f_small, DIM, 20, H - 124)
         draw_text(self.screen, "Synthetic training data", self.f_small, DIM, 20, H - 102)
         draw_text(self.screen, "Paul Nercessian", self.f_small, TEXT, 20, H - 64)
-        draw_text(self.screen, "Alt 1-6  Navigate", self.f_small, DIM, 20, H - 40)
+        draw_text(self.screen, "Alt 1-7  Navigate", self.f_small, DIM, 20, H - 40)
 
     def _handle_sidebar_click(self, pos) -> Optional[State]:
         if self.result_full_view is not None:
@@ -638,7 +641,7 @@ class DriftSyncApplication:
         return None
 
     def _focus_controls(self):
-        if self.result_full_view is not None:
+        if self.result_full_view is not None or self.state == State.MATHEMATICS:
             return []
         prefixes = {State.MENU: ("_menu_",), State.PLAY_TASK: ("_btn_play_", "_play_name"),
                     State.DEMO: ("_btn_demo_", "_btn_trials_", "_btn_sessions_", "_demo_name", "demo_view"),
@@ -670,10 +673,14 @@ class DriftSyncApplication:
                 return
 
             if event.type == pygame.KEYDOWN and getattr(event, "mod", 0) & pygame.KMOD_ALT:
-                targets = (State.MENU, State.LIVE_MODE, State.PLAY_TASK, State.DEMO, State.RESULTS, State.LEARN)
-                if pygame.K_1 <= event.key <= pygame.K_6:
+                targets = (State.MENU, State.LIVE_MODE, State.PLAY_TASK, State.DEMO, State.RESULTS, State.LEARN, State.MATHEMATICS)
+                if pygame.K_1 <= event.key <= pygame.K_7:
                     self._enter_state(targets[event.key - pygame.K_1])
                     continue
+
+            if self.state == State.MATHEMATICS and event.type == pygame.KEYDOWN and event.key in (pygame.K_TAB, pygame.K_RETURN, pygame.K_SPACE, pygame.K_LEFT, pygame.K_RIGHT):
+                self.math_view.handle_event(event)
+                continue
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
                 controls = self._focus_controls()
@@ -718,6 +725,8 @@ class DriftSyncApplication:
                 self._handle_play_event(event)
             elif self.state == State.LIVE_MODE:
                 self._handle_live_event(event)
+            elif self.state == State.MATHEMATICS:
+                self.math_view.handle_event(event)
 
     def _enter_state(self, target: State) -> None:
         self._focus_index = -1
@@ -775,6 +784,8 @@ class DriftSyncApplication:
             self._render_play_task()
         elif self.state == State.LIVE_MODE:
             self._render_live_mode()
+        elif self.state == State.MATHEMATICS:
+            self.math_view.render(self.screen)
 
         for i, control in enumerate(self._focus_controls()):
             if isinstance(control, Button):
@@ -1780,11 +1791,11 @@ class DriftSyncApplication:
             draw_border(self.screen, rect, ACCENT if active else BORDER)
             draw_text(self.screen, label + ("  / selected" if active else ""), self.f_body,
                       TEXT if active else DIM, *rect.center, "center")
-        from driftsync.realtime.checkpoints import resolve_checkpoint_path
+        from driftsync.realtime.checkpoints import resolve_workspace_checkpoint
         from driftsync.configs import RealtimeConfig
         try:
-            resolve_checkpoint_path(self.live_model_choice, RealtimeConfig().checkpoint_dir)
-            status = "Checkpoint available. Predictions begin after 20 trials."
+            checkpoint = resolve_workspace_checkpoint(self.live_model_choice)
+            status = f"Checkpoint: {checkpoint.parent.parent.name[:35]}. Predictions begin after 20 trials."
         except FileNotFoundError:
             status = "No trained checkpoint. The session will record behaviour only."
         draw_text(self.screen, status, self.f_body, DIM, x, 378)
@@ -1861,10 +1872,16 @@ class DriftSyncApplication:
         pygame.quit()
         try:
             from driftsync.configs import SimulatorConfig, RealtimeConfig
+            from driftsync.realtime.checkpoints import resolve_workspace_checkpoint
             from driftsync.realtime.live_simulator import LiveDriftSimulator
+            rt_config = RealtimeConfig(model_type=self.live_model_choice)
+            try:
+                rt_config.checkpoint_dir = str(resolve_workspace_checkpoint(self.live_model_choice).parent)
+            except FileNotFoundError:
+                pass
             saved_path = LiveDriftSimulator(
                 SimulatorConfig(num_trials=150),
-                RealtimeConfig(model_type=self.live_model_choice),
+                rt_config,
                 model_type=self.live_model_choice,
             ).run()
             self.notice = "Live session saved. Open Results to review it." if saved_path else "Session canceled. Existing recordings are unchanged."

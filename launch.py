@@ -141,6 +141,17 @@ def ensure_dependencies() -> bool:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    if "--version" in sys.argv:
+        from driftsync import __version__
+        print(f"DriftSync {__version__}")
+        return
+    if "--self-test" in sys.argv:
+        import argparse
+        parser = argparse.ArgumentParser(description="Verify a DriftSync distribution")
+        parser.add_argument("--self-test", metavar="REPORT_JSON", required=True)
+        from driftsync.release_check import run_release_check
+        run_release_check(parser.parse_args().self_test)
+        return
     print()
     print("  DriftSync: Real-Time Cognitive Drift Prediction")
     print()

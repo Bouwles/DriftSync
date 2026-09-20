@@ -36,6 +36,19 @@ def capture(output):
         app.learn_page = i
         app._render()
         pygame.image.save(app.screen, str(output / f"guide-{i + 1}.png"))
+    app._enter_state(State.MATHEMATICS)
+    for i in range(5):
+        app.math_view.page = i
+        app._render()
+        pygame.image.save(app.screen, str(output / f"math-{i + 1}.png"))
+    app.math_view.page = 2
+    app.math_view.model = "Transformer"
+    app._render()
+    pygame.image.save(app.screen, str(output / "math-transformer.png"))
+    app.math_view.page = 0
+    app.viewport.event(pygame.event.Event(pygame.VIDEORESIZE, w=960, h=600))
+    app._render()
+    pygame.image.save(app.viewport.window, str(output / "math-small.png"))
     app._enter_state(State.MENU)
     app.viewport.event(pygame.event.Event(pygame.VIDEORESIZE, w=960, h=600))
     app._render()

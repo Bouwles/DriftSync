@@ -8,6 +8,18 @@ CHECKPOINT_FILENAMES = {
 }
 
 
+def resolve_workspace_checkpoint(model_type: str, results_dir: str | Path = "driftsync/results") -> Path:
+    """Default checkpoint, or newest named training run on a fresh installation."""
+    base = Path(results_dir)
+    try:
+        return resolve_checkpoint_path(model_type, base / "checkpoints")
+    except FileNotFoundError:
+        candidates = list(base.glob(f"*/checkpoints/{CHECKPOINT_FILENAMES[model_type]}"))
+        if not candidates:
+            raise
+        return max(candidates, key=lambda path: path.stat().st_mtime_ns)
+
+
 def resolve_checkpoint_path(model_type: str, checkpoint_dir: str | Path) -> Path:
     """Return an existing checkpoint path for a supported model type."""
     if model_type not in CHECKPOINT_FILENAMES:

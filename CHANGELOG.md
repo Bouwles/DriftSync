@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.2.0 — 2026-09-20 — Mathematics workspace & Windows release
+
+- Added a dedicated Mathematics section with typeset equations, architecture diagrams,
+  interactive worked examples and links to the implementing source files.
+- Five topics cover prediction targets, behavioural features, LSTM/Transformer models,
+  Monte Carlo dropout uncertainty, weighted loss and calibration error.
+- Added Alt+7 navigation and an in-app version label; retained full keyboard controls
+  and readable layouts at the minimum window size.
+- Live mode now discovers checkpoints saved by named in-app training runs when no
+  default checkpoint exists.
+- Published a portable Windows x64 ZIP with bundled dependencies, a checksum and a
+  frozen-executable smoke check. Personal sessions and local checkpoints are excluded.
+- Includes the complete desktop workspace redesign described below.
+
 ## 2026-09-20 - Desktop workspace redesign
 
 - Shared charcoal/teal design system and native desktop typography across setup,

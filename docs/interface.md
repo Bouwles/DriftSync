@@ -1,19 +1,20 @@
 # Desktop interface
 
 Launch with `python launch.py`. The workspace links to live analysis, task recording,
-model training, results and the field guide. No server or browser is needed.
+model training, results, the field guide and Mathematics. No server or browser is needed.
 
 ## Controls
 
 | Context | Controls |
 | --- | --- |
 | Workspace | Mouse; Tab / Shift+Tab and Enter for actions |
-| Navigation | Alt+1 workspace, Alt+2 live, Alt+3 record, Alt+4 train, Alt+5 results, Alt+6 guide |
+| Navigation | Alt+1 workspace, Alt+2 live, Alt+3 record, Alt+4 train, Alt+5 results, Alt+6 guide, Alt+7 mathematics |
 | Window | Resize or F11 to toggle fullscreen |
 | Task | Click matching shape; Space to skip; Esc ends the session |
 | Live setup | L / T select LSTM or Transformer |
 | Results | Scroll; click a plot to inspect; Esc closes the plot first |
 | Field guide | Left / Right pages; mouse wheel scrolls long content |
+| Mathematics | Left / Right topics; Tab / Shift+Tab focus; Enter / Space activate examples |
 
 The logical canvas scales with the window and maps pointer input back to task
 coordinates. The desktop workspace has a 960 × 600 minimum window. Task dimensions,
@@ -45,11 +46,26 @@ Canceling setup returns without writing task data or replacing prediction logs.
 Canceling calibration before completion does not save an incomplete baseline.
 After actual trials, ending the session preserves the existing save workflow.
 
+## Mathematics
+
+The five topics pair STIX typeset equations with interactive examples and references
+to the implementing Python files. Prediction shows the future-error target; Behaviour
+explains robust scaling and rolling errors; Sequence models compares LSTM and masked
+Transformer attention; Uncertainty visualizes the mean and sample standard deviation
+of 30 dropout passes; Learning covers weighted binary cross-entropy and expected
+calibration error. Example values are labeled as illustrative, not live measurements.
+
+The version label in the sidebar identifies the installed app. For Windows releases,
+extract the complete ZIP and keep its `_internal` directory beside `DriftSync.exe`.
+Train a model from the app before live predictions. Live setup uses the default
+checkpoint when present, otherwise the newest checkpoint for that architecture from
+a named training run under `driftsync/results`.
+
 ## Visual verification
 
 `python scripts/capture_ui.py` renders the actual UI to `build/ui-review/`, including
 the workspace, all guide pages, training, results, task setup, live setup, calibration,
-task, missing-model/warm-up states and smaller windows. The prediction preview is
+task, all Mathematics topics, missing-model/warm-up states and smaller windows. The prediction preview is
 visibly labeled and uses `tests/fixtures/realtime_log_sample.json`. It does not run
 inference or invent chart values. Captures reflect local checkpoint availability.
 

@@ -124,7 +124,7 @@ Panels and controls are restrained rectangles with small corner radii. Borders a
 
 - **Buttons:** Teal filled primary actions and raised secondary actions use centred labels. Secondary hover changes border and text to teal. Keyboard focus adds an external outline; disabled controls use secondary text and ignore activation. Tab navigation and Enter activation keep shell actions available without a mouse.
 - **Inputs:** Raised fill, muted placeholder, teal active border and blinking caret. Long text scrolls within the clipped field instead of covering adjacent controls.
-- **Navigation:** Persistent left sidebar with a clear active row and compact text labels. Alt 1–6 shortcuts supplement pointer interaction.
+- **Navigation:** Persistent left sidebar with a clear active row and compact text labels. Alt 1–7 shortcuts supplement pointer interaction.
 - **Panels and logs:** Flat tonal groups with thin borders. Training logs use monospace and real process output; empty panels explain which action produces their evidence.
 - **Live analysis rail:** State and advice precede error probability, forecast horizon, MC-dropout standard deviation, unavailable calibrated confidence, risk history and behavioural signals.
 - **History chart:** Plot actual per-trial probability values with straight connecting segments. Show a dashed warning threshold, optional plus/minus one standard deviation band, and a pointer-selected trial/value tooltip. Empty history displays a waiting message. Do not smooth, interpolate extra samples or invent a trajectory.
@@ -144,3 +144,7 @@ Panels and controls are restrained rectangles with small corner radii. Borders a
 - **Don't** introduce decorative gradients, glow, fake scores or fabricated charts.
 - **Don't** present standard deviation as calibrated confidence or behavioural signals as causal explanations.
 - **Don't** interpolate extra prediction samples or move task targets to accommodate the analysis rail.
+
+## Mathematics workspace
+
+Use STIX math typography for fractions, sums, subscripts and Greek symbols. Keep equations on the left and worked examples on the right, with a shared divider and generous vertical spacing. Five topic tabs keep the explanation focused; implementation references anchor every page. Worked examples must remain explicitly illustrative, and their controls must support keyboard focus. Render equations through Matplotlib MathText, cache surfaces, and fit them within their allocated bounds at every supported window size.
