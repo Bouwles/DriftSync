@@ -31,24 +31,28 @@ from driftsync.utils import compute_ece, compute_roc_curve, compute_confusion_ma
 # ---------------------------------------------------------------------------
 
 STYLE = {
-    "figure.facecolor":  "#0f0f19",
-    "axes.facecolor":    "#0f0f19",
-    "axes.edgecolor":    "#444",
-    "axes.labelcolor":   "#ccc",
-    "xtick.color":       "#999",
-    "ytick.color":       "#999",
-    "text.color":        "#eee",
-    "grid.color":        "#333",
-    "grid.linestyle":    "--",
+    "figure.facecolor":  "#171b1e",
+    "axes.facecolor":    "#171b1e",
+    "axes.edgecolor":    "#3b4449",
+    "axes.labelcolor":   "#ebefed",
+    "xtick.color":       "#a4b1b4",
+    "ytick.color":       "#a4b1b4",
+    "text.color":        "#ebefed",
+    "grid.color":        "#3b4449",
+    "grid.linestyle":    ":",
     "grid.linewidth":    0.5,
     "axes.grid":         True,
-    "font.family":       "monospace",
+    "font.family":       "sans-serif",
     "lines.linewidth":   2.0,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "axes.titlepad": 18,
+    "axes.labelpad": 10,
 }
 
 MODEL_COLORS = {
-    "lstm":        "#64dcb4",   # teal-green
-    "transformer": "#b464dc",   # purple
+    "lstm":        "#77c7c0",   # teal-green
+    "transformer": "#c4bca3",   # neutral comparison
 }
 
 
@@ -211,7 +215,7 @@ def plot_training_history(
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle(f"Training History — {model_name.upper()}", fontsize=14, fontweight="bold")
 
-    color = MODEL_COLORS.get(model_name.lower(), "#64dcb4")
+    color = MODEL_COLORS.get(model_name.lower(), "#77c7c0")
     epochs = range(1, len(history["train_loss"]) + 1)
 
     panels = [
@@ -259,7 +263,7 @@ def plot_inference_speed(
     values = list(speed_data.values())
     colors = [MODEL_COLORS.get(n.lower(), "#888") for n in names]
 
-    bars = ax.bar(names, values, color=colors, edgecolor="#333", linewidth=1.2, width=0.5)
+    bars = ax.bar(names, values, color=colors, edgecolor="#3b4449", linewidth=1.2, width=0.5)
 
     for bar, val in zip(bars, values):
         ax.text(
@@ -339,7 +343,7 @@ def plot_metric_comparison(
         offset = (i - (n_models - 1) / 2) * width
         color  = MODEL_COLORS.get(model_name.lower(), "#888")
         bars = ax.bar(x + offset, values, width=width * 0.9,
-                      label=model_name.upper(), color=color, edgecolor="#333")
+                      label=model_name.upper(), color=color, edgecolor="#3b4449")
         for bar, val in zip(bars, values):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,

@@ -10,13 +10,17 @@ DriftSync is an end-to-end machine learning system that predicts when a person i
 
 This is a research and portfolio project, not a medical device. It is not clinically validated and makes no health claims.
 
-![DriftSync overview](docs/assets/driftsync-overview.png)
+![DriftSync desktop workspace](docs/assets/driftsync-workspace.png)
 
 ## Live Demo
 
-The live inference view updates a rolling risk score after each trial. When probability or uncertainty crosses the threshold, the interface raises a warning and explains which behavioral signals are drifting.
+The live workspace separates the attention task from its analysis panel. It shows error risk, MC-dropout uncertainty, recent outcomes and an inspectable prediction timeline. Predictions begin once the sequence window is full; missing checkpoints and warm-up are explicitly labeled. Calibrated prediction confidence is not available and is never inferred from uncertainty.
 
-![DriftSync live demo](docs/assets/driftsync-live-demo.gif)
+![Live workspace with labeled replay-fixture predictions](docs/assets/driftsync-live-workspace.png)
+
+This UI preview renders the two events in the checked-in replay fixture; it is not a live human session. The task area preserves the existing stimulus positions and response rules.
+
+The desktop interface supports resizing, F11 fullscreen, Tab/Enter controls, and Alt+1–6 navigation. See [the interface guide](docs/interface.md) for controls and measurement definitions.
 
 ## Why It Matters
 

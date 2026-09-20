@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-20T07:22:39Z",
+  "title": "Design System: DriftSync",
+  "extensions": {
+    "colorMeta": {
+      "background": { "role": "neutral", "displayName": "Charcoal canvas" },
+      "panel": { "role": "neutral", "displayName": "Graphite panel" },
+      "raised": { "role": "neutral", "displayName": "Raised graphite" },
+      "accent": { "role": "primary", "displayName": "Research teal" },
+      "success": { "role": "semantic", "displayName": "Correct / low risk" },
+      "warning": { "role": "semantic", "displayName": "Caution / uncertainty" },
+      "danger": { "role": "semantic", "displayName": "Error / elevated risk" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Workspace display", "purpose": "Landing statement in native Segoe UI Bold." },
+      "body": { "displayName": "Native body", "purpose": "Prose and controls; resolve Segoe UI regular from its font file on Windows." },
+      "log": { "displayName": "Training output", "purpose": "Monospace process output and diagnostic text." }
+    },
+    "motion": [
+      { "name": "control-feedback", "value": "immediate", "purpose": "Hover, focus and selection change without movement or easing." },
+      { "name": "input-caret", "value": "500ms", "purpose": "Active text-input caret visibility toggles." }
+    ],
+    "breakpoints": [
+      { "name": "minimum-window-width", "value": "960px" },
+      { "name": "minimum-window-height", "value": "600px" }
+    ]
+  },
+  "components": [
+    { "name": "Primary action", "kind": "button", "refersTo": "button-primary", "description": "Native Pygame filled action with lighter hover fill and external keyboard focus outline." },
+    { "name": "Secondary action", "kind": "button", "refersTo": "button-secondary", "description": "Native Pygame raised action; teal border and label on hover or focus." },
+    { "name": "Run name input", "kind": "input", "refersTo": "input", "description": "Native text field with clipped horizontal scrolling, teal active border and blinking caret." },
+    { "name": "Workspace navigation", "kind": "nav", "description": "Persistent 184px shell sidebar with 40px rows on a 48px rhythm and Alt 1–6 shortcuts." },
+    { "name": "Analysis panel", "kind": "card", "refersTo": "panel", "description": "Flat tonal region with thin border and compact headings; no decorative shadow." },
+    { "name": "Risk history", "kind": "custom", "description": "Native per-trial probability plot with warning threshold, optional plus/minus one SD band and trial tooltip; no synthetic samples." },
+    { "name": "Live analysis rail", "kind": "custom", "description": "400px rail outside original task coordinates, showing state, probability, uncertainty, unavailable calibrated confidence and behavioural signals." }
+  ],
+  "narrative": {
+    "northStar": "The Research Workspace",
+    "overview": "DriftSync is a native Pygame interface with calm charcoal surfaces, readable instrumentation and restrained teal emphasis. Its visual hierarchy separates the participant's task from analytical evidence while keeping both visible. Credibility comes from clear labels, real measurements and explicit unavailable states.",
+    "keyCharacteristics": [
+      "Quiet, flat surfaces with compact controls.",
+      "Clear separation between task interaction and analysis.",
+      "Recorded evidence and uncertainty remain visible."
+    ],
+    "rules": [
+      { "name": "The Semantic Colour Rule", "body": "Pair state colours with words or values; colour alone must not explain risk or availability.", "section": "colors" }
+    ],
+    "dos": [
+      "Do preserve logical task coordinates and inverse pointer mapping when resizing.",
+      "Do label probability with its forecast horizon and uncertainty as MC-dropout standard deviation.",
+      "Do show unavailable prediction confidence explicitly and wait for enough real trial history before showing risk.",
+      "Do retain visible keyboard focus, clipped text and meaningful empty states."
+    ],
+    "donts": [
+      "Don't introduce decorative gradients, glow, fake scores or fabricated charts.",
+      "Don't present standard deviation as calibrated confidence or behavioural signals as causal explanations.",
+      "Don't interpolate extra prediction samples or move task targets to accommodate the analysis rail."
+    ]
+  }
+}

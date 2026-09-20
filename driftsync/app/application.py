@@ -22,6 +22,9 @@ from typing import List, Optional, Tuple
 import pygame
 
 
+from driftsync import ui
+
+
 class State(Enum):
     SPLASH    = auto()
     MENU      = auto()
@@ -32,25 +35,14 @@ class State(Enum):
     LIVE_MODE = auto()
 
 
-BG        = (15,  17,  23)
-PANEL     = (22,  27,  34)
-PANEL2    = (30,  36,  44)
-BORDER    = (48,  54,  61)
-ACCENT    = (88, 166, 255)
-GREEN     = (63, 185,  80)
-YELLOW    = (210, 153,  34)
-RED       = (248,  81,  73)
-TEXT      = (230, 237, 243)
-DIM       = (110, 118, 129)
-WHITE     = (255, 255, 255)
-LSTM_C    = (88, 166, 255)
-TF_C      = (188, 140, 255)
-
-SIDEBAR_W  = 200
-SIDEBAR_BG = (17, 21, 28)
-
-W, H = 1150, 740
-FPS  = 60
+BG, PANEL, PANEL2, BORDER = ui.BG, ui.PANEL, ui.PANEL2, ui.BORDER
+ACCENT, GREEN, YELLOW, RED = ui.ACCENT, ui.GREEN, ui.YELLOW, ui.RED
+TEXT, DIM, WHITE = ui.TEXT, ui.DIM, ui.TEXT
+LSTM_C, TF_C = ACCENT, (196, 188, 163)
+SIDEBAR_W = 184
+SIDEBAR_BG = (20, 24, 27)
+W, H = 1280, 800
+FPS = 60
 
 
 class QueueLogHandler(logging.Handler):
@@ -134,16 +126,17 @@ class Button:
         self.radius      = radius
         self.accent_fill = accent_fill
         self.hovered     = False
+        self.focused     = False
         self.disabled    = False
 
     def draw(self, surface) -> None:
         if self.disabled:
             bg, tc, bc = PANEL2, DIM, BORDER
         elif self.accent_fill:
-            bg = (120, 190, 255) if self.hovered else ACCENT
+            bg = (151, 217, 210) if self.hovered else ACCENT
             tc = (10, 15, 20)
             bc = bg
-        elif self.hovered:
+        elif self.hovered or self.focused:
             bg = self.hover_color
             tc = self.hover_text
             bc = ACCENT
@@ -152,7 +145,8 @@ class Button:
             tc = self.text_color
             bc = BORDER
 
-        surface.set_clip(self.rect)
+        previous_clip = surface.get_clip()
+        surface.set_clip(self.rect.clip(previous_clip))
         draw_rect(surface, self.rect, bg, self.radius)
         draw_border(surface, self.rect, bc, self.radius, 1)
 
@@ -162,9 +156,13 @@ class Button:
             sc = (160, 170, 180) if self.hovered else DIM
             draw_text(surface, self.sub_text, self.sub_font, sc,
                       self.rect.centerx, cy + self.font.get_height() + 3, anchor="center")
-        surface.set_clip(None)
+        surface.set_clip(previous_clip)
+        if self.focused and not self.disabled:
+            draw_border(surface, self.rect.inflate(6, 6), ACCENT, self.radius, 2)
 
     def handle_event(self, event) -> bool:
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN and self.focused and not self.disabled:
+            return True
         if event.type == pygame.MOUSEMOTION:
             self.hovered = self.rect.collidepoint(event.pos)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and not self.disabled:
@@ -202,14 +200,19 @@ class TextInput:
         bc = ACCENT if self.active else BORDER
         draw_rect(surface, self.rect, PANEL2, 5)
         draw_border(surface, self.rect, bc, 5, 1)
+        previous_clip = surface.get_clip()
+        surface.set_clip(self.rect.inflate(-16, -4).clip(previous_clip))
         txt = self.text if self.text else self.placeholder
         col = TEXT if self.text else DIM
         s   = self.font.render(txt, True, col)
-        surface.blit(s, (self.rect.left + 10, self.rect.centery - s.get_height() // 2))
+        offset = max(0, s.get_width() - self.rect.width + 24) if self.text else 0
+        surface.blit(s, (self.rect.left + 10 - offset, self.rect.centery - s.get_height() // 2))
         if self.active and self._cur_vis:
-            cx = self.rect.left + 10 + self.font.size(self.text)[0]
+            cx = self.rect.left + 10 + self.font.size(self.text)[0] - offset
             pygame.draw.line(surface, ACCENT,
                              (cx, self.rect.top + 6), (cx, self.rect.bottom - 6), 1)
+
+        surface.set_clip(previous_clip)
 
 
 LEARN_PAGES = [
@@ -221,8 +224,8 @@ LEARN_PAGES = [
             "This happens to pilots, surgeons, air traffic controllers, and anyone performing "
             "repetitive cognitive work.\n\n"
             "Drift is not random — it follows measurable temporal patterns. Early in a session, "
-            "performance is sharp. After 20-30 minutes, subtle errors begin. After an hour, drift "
-            "becomes significant and potentially dangerous.\n\n"
+            "performance is sharp. Changes vary with the person and task. Drift "
+            "can become noticeable over time.\n\n"
             "DriftSync asks: can an AI model learn these patterns from your interaction history "
             "and predict WHEN your next mistake will happen — before it happens?"
         ),
@@ -245,9 +248,9 @@ LEARN_PAGES = [
         "visual": "task_demo",
     },
     {
-        "title": "3. The 11 AI Input Features",
+        "title": "3. The 15 AI Input Features",
         "body": (
-            "For each trial, the AI receives 11 numbers describing your recent performance:\n\n"
+            "For each trial, the AI receives 15 numbers describing your recent performance:\n\n"
             "  1. Reaction Time (normalised)  — how fast you responded\n"
             "  2. Correctness                 — 1.0 = right, 0.0 = error\n"
             "  3. Elapsed Time (normalised)   — how long you have been playing\n"
@@ -259,7 +262,11 @@ LEARN_PAGES = [
             "  9. Error Streak                — consecutive wrong answers\n"
             " 10. Target Match                — was the right shape shown?\n"
             " 11. Action                      — did you click or skip?\n\n"
-            "The AI looks at the last 20 trials at once, forming a sequence of shape (20, 11)."
+            " 12. Reaction-time variance\n"
+            " 13. Time since the last error\n"
+            " 14. Reaction-time trend\n"
+            " 15. Fatigue index\n\n"
+            "The AI looks at the last 20 trials at once, forming a sequence of shape (20, 15)."
         ),
         "visual": "features",
     },
@@ -270,7 +277,7 @@ LEARN_PAGES = [
             "for sequential data. Unlike a regular network, it has memory gates that decide "
             "what to remember and what to forget across time.\n\n"
             "Architecture:\n"
-            "  Input (20 trials x 11 features)\n"
+            "  Input (20 trials x 15 features)\n"
             "    -> Linear projection to 128 dimensions\n"
             "    -> 3 stacked LSTM layers with residual connections\n"
             "    -> Layer normalisation between each layer\n"
@@ -289,7 +296,7 @@ LEARN_PAGES = [
             "they look at ALL 20 trials simultaneously and learn which ones matter most "
             "for predicting the next mistake.\n\n"
             "Architecture:\n"
-            "  Input (20 x 11)\n"
+            "  Input (20 x 15)\n"
             "    -> Linear projection to 128 dimensions\n"
             "    -> Sinusoidal positional encoding (encodes time order)\n"
             "    -> 4 encoder layers (each: multi-head attention + FFN)\n"
@@ -314,7 +321,7 @@ LEARN_PAGES = [
             "A warning fires if EITHER:\n"
             "  - P(error) > 0.65  (high probability)\n"
             "  - Uncertainty > 0.20  (high model confusion)\n\n"
-            "Calibration (ECE): measures how well confidence matches real-world accuracy."
+            "Calibration (ECE) compares predicted probability with observed error frequency on evaluation data."
         ),
         "visual": "probability_gauge",
     },
@@ -517,11 +524,12 @@ class DriftSyncApplication:
         pygame.init()
         pygame.display.set_caption("DriftSync  [F11 = fullscreen]")
         self.fullscreen = False
-        self.screen = pygame.display.set_mode((W, H), pygame.RESIZABLE)
+        self.viewport = ui.Viewport((W, H), "DriftSync | Focus analysis")
+        self.screen = self.viewport.surface
         self.clock  = pygame.time.Clock()
         self._init_fonts()
 
-        self.state        = State.SPLASH
+        self.state        = State.MENU
         self.splash_start = time.time()
         self.learn_page   = 0
         self.running      = True
@@ -556,6 +564,9 @@ class DriftSyncApplication:
         self._play_skip_calib    = False
 
         self.live_model_choice = "lstm"
+        self.notice = ""
+        self._focus_index = -1
+        self.learn_scroll = 0
 
         # Session metrics (loaded from driftsync/sessions/*.json)
         self.session_metrics: list = []
@@ -565,14 +576,18 @@ class DriftSyncApplication:
         self._build_play_task_buttons()
 
     def _init_fonts(self) -> None:
-        self.f_title  = pygame.font.SysFont("Consolas", 40, bold=True)
-        self.f_head   = pygame.font.SysFont("Consolas", 26, bold=True)
-        self.f_sub    = pygame.font.SysFont("Consolas", 20, bold=True)
-        self.f_body   = pygame.font.SysFont("Consolas", 16)
-        self.f_small  = pygame.font.SysFont("Consolas", 14)
-        self.f_mono   = pygame.font.SysFont("Consolas", 14)
-        self.f_btn    = pygame.font.SysFont("Consolas", 17, bold=True)
-        self.f_btn_sm = pygame.font.SysFont("Consolas", 14)
+        ui.font.cache_clear()
+        self.f_title = ui.font(36, True)
+        self.f_head = ui.font(25, True)
+        self.f_sub = ui.font(20, True)
+        self.f_body = ui.font(17)
+        self.f_small = ui.font(14)
+        self.f_mono = ui.font(13, mono=True)
+        self.f_btn = ui.font(17, True)
+        self.f_btn_sm = ui.font(14)
+
+    def _mouse(self):
+        return self.viewport.point(pygame.mouse.get_pos())
 
     @property
     def _cx(self) -> int:
@@ -590,65 +605,91 @@ class DriftSyncApplication:
 
     def _render_sidebar(self) -> None:
         draw_rect(self.screen, pygame.Rect(0, 0, SIDEBAR_W, H), SIDEBAR_BG, 0)
-        vline(self.screen, SIDEBAR_W, 0, H, BORDER)
-
-        draw_text(self.screen, "DriftSync", self.f_sub, ACCENT, 16, 18)
-        draw_text(self.screen, "v2.0", self.f_small, DIM, 16, 42)
-        hline(self.screen, 62, 0, SIDEBAR_W)
-
-        if self.state in (State.LEARN, State.RESULTS):
-            NAV_H = 42
-            y = 74
-            mx, my = pygame.mouse.get_pos()
-            for label, target in self._NAV_ITEMS:
-                r      = pygame.Rect(0, y, SIDEBAR_W, NAV_H)
-                active = (self.state == target)
-                hov    = r.collidepoint(mx, my)
-
-                if active:
-                    draw_rect(self.screen, r, PANEL, 0)
-                    pygame.draw.rect(self.screen, ACCENT, pygame.Rect(0, y, 4, NAV_H))
-                    col = TEXT
-                elif hov:
-                    draw_rect(self.screen, r, PANEL2, 0)
-                    col = TEXT
-                else:
-                    col = DIM
-
-                draw_text(self.screen, label, self.f_body, col, 22, y + NAV_H // 2, anchor="midleft")
-                y += NAV_H + 2
-
-            hline(self.screen, y + 4, 0, SIDEBAR_W)
-
-        draw_text(self.screen, "made by Paul Nercessian", self.f_small, TEXT, 14, H - 38)
-        draw_text(self.screen, "ESC  quit", self.f_small, DIM, 14, H - 20)
+        vline(self.screen, SIDEBAR_W, 0, H)
+        ui.signal_mark(self.screen, 20, 26, 25)
+        draw_text(self.screen, "DriftSync", self.f_sub, TEXT, 54, 26)
+        draw_text(self.screen, "Focus analysis", self.f_small, DIM, 20, 62)
+        nav = [("Workspace", State.MENU), ("Live session", State.LIVE_MODE),
+               ("Record task", State.PLAY_TASK), ("Train models", State.DEMO),
+               ("Results", State.RESULTS), ("Field guide", State.LEARN)]
+        self._nav_rects = []
+        for i, (label, target) in enumerate(nav):
+            rect = pygame.Rect(12, 120 + i * 48, SIDEBAR_W - 24, 40)
+            active = self.state == target
+            if active or rect.collidepoint(self._mouse()):
+                draw_rect(self.screen, rect, PANEL2 if active else PANEL)
+            if active:
+                pygame.draw.circle(self.screen, ACCENT, (rect.right - 14, rect.centery), 3)
+            draw_text(self.screen, label, self.f_body, TEXT if active else DIM,
+                      rect.x + 12, rect.centery, "midleft")
+            self._nav_rects.append((rect, target))
+        hline(self.screen, H - 142, 20, SIDEBAR_W - 20)
+        draw_text(self.screen, "Research workspace", self.f_small, DIM, 20, H - 124)
+        draw_text(self.screen, "Synthetic training data", self.f_small, DIM, 20, H - 102)
+        draw_text(self.screen, "Paul Nercessian", self.f_small, TEXT, 20, H - 64)
+        draw_text(self.screen, "Alt 1-6  Navigate", self.f_small, DIM, 20, H - 40)
 
     def _handle_sidebar_click(self, pos) -> Optional[State]:
-        if self.state not in (State.LEARN, State.RESULTS):
+        if self.result_full_view is not None:
             return None
-        NAV_H = 42
-        y = 74
-        for _, target in self._NAV_ITEMS:
-            if pygame.Rect(0, y, SIDEBAR_W, NAV_H).collidepoint(pos):
+        for rect, target in getattr(self, "_nav_rects", []):
+            if rect.collidepoint(pos):
                 return target
-            y += NAV_H + 2
         return None
+
+    def _focus_controls(self):
+        if self.result_full_view is not None:
+            return []
+        prefixes = {State.MENU: ("_menu_",), State.PLAY_TASK: ("_btn_play_", "_play_name"),
+                    State.DEMO: ("_btn_demo_", "_btn_trials_", "_btn_sessions_", "_demo_name", "demo_view"),
+                    State.LEARN: ("_btn_learn_",), State.LIVE_MODE: ("_live_btn",)}
+        controls = []
+        for key, value in vars(self).items():
+            if key.startswith(prefixes.get(self.state, ("_btn_results_", "_btn_human_", "_btn_export_"))):
+                if isinstance(value, (Button, TextInput)) and not getattr(value, "disabled", False):
+                    if key == "_btn_play_human_results" and not self._play_task_done:
+                        continue
+                    controls.append(value)
+        if self.state == State.MENU:
+            controls = [btn for btn, _ in self._menu_btns] + [self._menu_quit_btn]
+        elif self.state == State.RESULTS:
+            names = ("_btn_results_open",) if self.results_tab == "ml" else ("_btn_human_refresh", "_btn_human_open", "_btn_export_csv")
+            controls = [getattr(self, key) for key in names if hasattr(self, key)]
+        elif self.state == State.DEMO and self.demo_worker.status != "idle":
+            controls = [button for button in (self._btn_demo_start, self.demo_view_results_btn)
+                        if button is not None and not button.disabled]
+        return controls
 
     # Event / update / render dispatch
 
     def _handle_events(self) -> None:
-        for event in pygame.event.get():
+        for raw_event in pygame.event.get():
+            event = self.viewport.event(raw_event)
             if event.type == pygame.QUIT:
                 self.running = False
                 return
 
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
-                self.fullscreen = not self.fullscreen
-                flags = pygame.FULLSCREEN | pygame.SCALED if self.fullscreen else pygame.RESIZABLE
-                self.screen = pygame.display.set_mode((W, H), flags)
-                return
+            if event.type == pygame.KEYDOWN and getattr(event, "mod", 0) & pygame.KMOD_ALT:
+                targets = (State.MENU, State.LIVE_MODE, State.PLAY_TASK, State.DEMO, State.RESULTS, State.LEARN)
+                if pygame.K_1 <= event.key <= pygame.K_6:
+                    self._enter_state(targets[event.key - pygame.K_1])
+                    continue
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+                controls = self._focus_controls()
+                if controls:
+                    self._focus_index = (self._focus_index + (-1 if event.mod & pygame.KMOD_SHIFT else 1)) % len(controls)
+                    for i, control in enumerate(controls):
+                        if isinstance(control, TextInput):
+                            control.active = i == self._focus_index
+                        else:
+                            control.focused = i == self._focus_index
+                continue
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                if self.result_full_view is not None:
+                    self.result_full_view = None
+                    continue
                 if self.state == State.MENU:
                     self.running = False
                 else:
@@ -656,6 +697,10 @@ class DriftSyncApplication:
                 return
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self._focus_index = -1
+                for control in self._focus_controls():
+                    if isinstance(control, Button):
+                        control.focused = False
                 target = self._handle_sidebar_click(event.pos)
                 if target is not None:
                     self._enter_state(target)
@@ -675,18 +720,14 @@ class DriftSyncApplication:
                 self._handle_live_event(event)
 
     def _enter_state(self, target: State) -> None:
+        self._focus_index = -1
         if target == State.RESULTS:
             self._load_ml_results()
             self._load_human_sessions()
             self._load_session_metrics()
         elif target == State.DEMO:
-            self.demo_logs = []
-            self.demo_metrics = {}
-            self.demo_train_loss.clear()
-            self.demo_val_loss.clear()
-            self.demo_val_auc.clear()
-            self.demo_worker = DemoWorker()
-            self._build_demo_buttons()
+            if not hasattr(self, "_btn_demo_start"):
+                self._build_demo_buttons()
         elif target == State.PLAY_TASK:
             self._play_task_done = False
             self._build_play_task_buttons()
@@ -697,7 +738,7 @@ class DriftSyncApplication:
             if time.time() - self.splash_start > 2.5:
                 self.state = State.MENU
 
-        elif self.state == State.DEMO:
+        if self.demo_worker.status != "idle":
             for line in self.demo_worker.poll_logs():
                 self.demo_logs.append(line)
             if len(self.demo_logs) > 150:
@@ -717,7 +758,7 @@ class DriftSyncApplication:
 
         if self.state == State.SPLASH:
             self._render_splash()
-            pygame.display.flip()
+            self.viewport.present()
             return
 
         self._render_sidebar()
@@ -735,7 +776,12 @@ class DriftSyncApplication:
         elif self.state == State.LIVE_MODE:
             self._render_live_mode()
 
-        pygame.display.flip()
+        for i, control in enumerate(self._focus_controls()):
+            if isinstance(control, Button):
+                control.focused = i == self._focus_index
+                if control.focused and not control.disabled:
+                    draw_border(self.screen, control.rect.inflate(6, 6), ACCENT, 5, 2)
+        self.viewport.present()
 
     # SPLASH
 
@@ -758,49 +804,41 @@ class DriftSyncApplication:
     # MENU
 
     def _build_menu_buttons(self) -> None:
-        mid = self._cx + (W - self._cx) // 2
-        self._menu_btns: List[Tuple[Button, Optional[State]]] = []
-        items = [
-            ("Learn",     "7-page interactive guide to drift, LSTM & Transformer models",   State.LEARN),
-            ("Run Demo",  "Full ML pipeline: generate data, train both models, compare",    State.DEMO),
-            ("Play Task", "Record your own cognitive session (custom name & trial count)",   State.PLAY_TASK),
-            ("Results",   "Browse ML run plots and human session statistics",               State.RESULTS),
-            ("Live AI",   "Real-time drift prediction overlay while you play",              State.LIVE_MODE),
-        ]
-        bw, bh, gap = 700, 56, 10
-        bx = mid - bw // 2
-        by = 200
-        for label, desc, target in items:
-            btn = Button(pygame.Rect(bx, by, bw, bh), label, self.f_btn,
-                         color=PANEL, text_color=TEXT,
-                         hover_color=PANEL2, hover_text=ACCENT,
-                         sub_text=desc, sub_font=self.f_small)
-            self._menu_btns.append((btn, target))
-            by += bh + gap
-
-        qbw = 160
-        self._menu_quit_btn = Button(
-            pygame.Rect(mid - qbw // 2, by + 14, qbw, 38), "Quit",
-            self.f_btn, color=PANEL2, text_color=DIM, hover_text=RED)
+        x = self._cx + 40
+        self._menu_btns = []
+        items = [("Start live session", State.LIVE_MODE), ("Record a task", State.PLAY_TASK),
+                 ("Train models", State.DEMO), ("Review results", State.RESULTS), ("Read the field guide", State.LEARN)]
+        for i, (label, target) in enumerate(items):
+            rect = pygame.Rect(x, 276, 218, 46) if i == 0 else pygame.Rect(x, 430 + (i - 1) * 62, 280, 42)
+            self._menu_btns.append((Button(rect, label, self.f_btn, accent_fill=i == 0), target))
+        self._menu_quit_btn = Button(pygame.Rect(W - 132, H - 56, 92, 34), "Quit", self.f_btn_sm)
 
     def _render_menu(self) -> None:
-        cx  = self._cx
-        mid = cx + (W - cx) // 2
-
-        draw_text(self.screen, "DriftSync", self.f_title, TEXT, mid, 52, anchor="midtop")
-        draw_text(self.screen, "Real-Time Neural Cognitive Drift Prediction System",
-                  self.f_body, DIM, mid, 102, anchor="midtop")
-        hline(self.screen, 140, cx, W)
-
-        mx, my = pygame.mouse.get_pos()
+        x = self._cx + 40
+        draw_text(self.screen, "Workspace", self.f_head, TEXT, x, 32)
+        draw_text(self.screen, "Ready for a session", self.f_small, DIM, W - 40, 42, "topright")
+        hline(self.screen, 86, x, W - 40)
+        draw_text(self.screen, "See when focus starts to drift.", self.f_title, TEXT, x, 125)
+        ui.paragraph(self.screen, "Follow a timed attention task. Inspect predicted error risk alongside the behaviour behind it.",
+                     pygame.Rect(x, 190, 580, 64), self.f_body)
+        draw_text(self.screen, "Live model analysis", self.f_sub, TEXT, x + 258, 280)
+        draw_text(self.screen, "20 trials of history. A 5-trial forecast.", self.f_small, DIM, x + 258, 310)
+        hline(self.screen, 378, x, W - 40)
+        draw_text(self.screen, "Explore the workflow", self.f_sub, TEXT, x, 396)
+        descriptions = ["Collect reaction times and accuracy, with optional calibration.",
+                        "Generate synthetic sessions and compare sequence models.",
+                        "Inspect experiment plots, recorded sessions and exports.",
+                        "Understand the task, model inputs and uncertainty."]
+        for i, description in enumerate(descriptions):
+            draw_text(self.screen, description, self.f_body, DIM, x + 306, 440 + i * 62)
         for btn, _ in self._menu_btns:
-            btn.hovered = btn.rect.collidepoint(mx, my)
+            btn.hovered = btn.rect.collidepoint(self._mouse())
             btn.draw(self.screen)
-        self._menu_quit_btn.hovered = self._menu_quit_btn.rect.collidepoint(mx, my)
         self._menu_quit_btn.draw(self.screen)
-
-        draw_text(self.screen, "Click a button to navigate   |   ESC = quit",
-                  self.f_small, DIM, mid, H - 18, anchor="midbottom")
+        draw_text(self.screen, "Research demonstration. Predictions are estimates of task error risk.",
+                  self.f_small, DIM, x, H - 45)
+        if self.notice:
+            draw_text(self.screen, self.notice[:110], self.f_small, YELLOW, x, 346)
 
     def _handle_menu_event(self, event) -> None:
         for btn, target in self._menu_btns:
@@ -817,61 +855,44 @@ class DriftSyncApplication:
         by = H - 54
         cx = self._cx
         self._btn_learn_back = Button(
-            pygame.Rect(cx + 12, by, bw, bh), "< Back",
+            pygame.Rect(cx + 12, by, bw, bh), "Previous",
             self.f_btn, color=PANEL2, text_color=DIM, hover_text=TEXT)
         self._btn_learn_next = Button(
-            pygame.Rect(W - 12 - bw, by, bw, bh), "Next >",
+            pygame.Rect(W - 12 - bw, by, bw, bh), "Next",
             self.f_btn, accent_fill=True)
         self._btn_learn_menu = Button(
-            pygame.Rect(cx + (W - cx) // 2 - 75, by, 150, bh), "Main Menu",
+            pygame.Rect(cx + (W - cx) // 2 - 75, by, 150, bh), "Workspace",
             self.f_btn, color=PANEL2, text_color=DIM, hover_text=TEXT)
 
     def _render_learn(self) -> None:
         page = LEARN_PAGES[self.learn_page]
-        cx   = self._cx
-        LIST_W = 200
-
-        draw_rect(self.screen, pygame.Rect(cx, 0, LIST_W, H), PANEL, 0)
-        vline(self.screen, cx + LIST_W, 0, H)
-
-        draw_text(self.screen, "Contents", self.f_small, TEXT, cx + 12, 14)
-        hline(self.screen, 32, cx, cx + LIST_W)
-
-        self.screen.set_clip(pygame.Rect(cx, 33, LIST_W, H - 33))
+        self._render_screen_header("Field guide")
+        x = self._cx + 24
         for i, p in enumerate(LEARN_PAGES):
-            short = p["title"][:28]
-            y     = 40 + i * 34
+            rect = pygame.Rect(x, 82 + i * 48, 230, 40)
             if i == self.learn_page:
-                draw_rect(self.screen, pygame.Rect(cx, y - 4, LIST_W, 30), PANEL2, 0)
-                pygame.draw.rect(self.screen, ACCENT, pygame.Rect(cx, y - 4, 4, 30))
-                col = TEXT
-            else:
-                col = DIM
-            draw_text(self.screen, short, self.f_small, col, cx + 14, y)
-        self.screen.set_clip(None)
-
-        draw_text(self.screen, f"{self.learn_page + 1} / {len(LEARN_PAGES)}",
-                  self.f_small, DIM, cx + LIST_W // 2, H - 24, anchor="midbottom")
-
-        content_x = cx + LIST_W + 22
-        content_w = W - content_x - 22
-        NAV_H     = 66
-
-        draw_text(self.screen, page["title"], self.f_head, TEXT, content_x, 18)
-        hline(self.screen, 50, cx + LIST_W, W)
-
-        body_rect = pygame.Rect(content_x, 58, content_w, H - 58 - NAV_H)
-        self.screen.set_clip(body_rect)
-        self._render_learn_body(page["body"], body_rect)
-        self.screen.set_clip(None)
-        self._render_learn_visual(page.get("visual", ""), content_x, content_w, body_rect.bottom + 4)
-
-        hline(self.screen, H - NAV_H, cx + LIST_W, W)
-        self._btn_learn_back.disabled = (self.learn_page == 0)
-        self._btn_learn_next.disabled = (self.learn_page == len(LEARN_PAGES) - 1)
-        self._btn_learn_back.draw(self.screen)
-        self._btn_learn_next.draw(self.screen)
-        self._btn_learn_menu.draw(self.screen)
+                draw_rect(self.screen, rect, PANEL2)
+            title = p["title"].split(". ", 1)[-1]
+            ui.paragraph(self.screen, title, rect.inflate(-16, -6), self.f_small,
+                         TEXT if i == self.learn_page else DIM, 2)
+        vline(self.screen, x + 254, 80, H - 90)
+        content = pygame.Rect(x + 286, 144, W - x - 330, H - 244)
+        draw_text(self.screen, page["title"], self.f_head, TEXT, content.x, 84)
+        # Scroll long educational content without losing the footer controls.
+        old = self.screen.get_clip()
+        self.screen.set_clip(content)
+        height = ui.paragraph(self.screen, page["body"],
+                             pygame.Rect(content.x, content.y - self.learn_scroll, content.width, 2400),
+                             self.f_body, TEXT, 7) - (content.y - self.learn_scroll)
+        self.screen.set_clip(old)
+        self._learn_max_scroll = max(0, height - content.height)
+        self.learn_scroll = min(self.learn_scroll, self._learn_max_scroll)
+        draw_text(self.screen, f"{self.learn_page + 1} of {len(LEARN_PAGES)}    Scroll to read", self.f_small, DIM,
+                  content.x, H - 88)
+        self._btn_learn_back.disabled = self.learn_page == 0
+        self._btn_learn_next.disabled = self.learn_page == len(LEARN_PAGES) - 1
+        for btn in (self._btn_learn_back, self._btn_learn_next, self._btn_learn_menu):
+            btn.draw(self.screen)
 
     def _render_learn_body(self, text: str, rect: pygame.Rect) -> None:
         lines = text.split("\n")
@@ -915,11 +936,11 @@ class DriftSyncApplication:
             self._draw_gauge_demo(cx, y, cw)
         elif vis == "lstm_arch":
             draw_text(self.screen,
-                      "Input(20,11) -> Proj -> LSTM x3 -> Head -> sigmoid -> P(error)",
+                      "Input(20,15) -> Proj -> LSTM x3 -> Head -> sigmoid -> P(error)",
                       self.f_small, TEXT, cx, y)
         elif vis == "transformer_arch":
             draw_text(self.screen,
-                      "Input(20,11) -> Proj -> PosEnc -> Attn x4 -> Pool -> Head -> P(error)",
+                      "Input(20,15) -> Proj -> PosEnc -> Attn x4 -> Pool -> Head -> P(error)",
                       self.f_small, TEXT, cx, y)
 
     def _draw_drift_curve(self, x, y, w, h) -> None:
@@ -942,6 +963,9 @@ class DriftSyncApplication:
             draw_progress_bar(self.screen, pygame.Rect(gx, y + 18, gw, 11), val, fg=col)
 
     def _handle_learn_event(self, event) -> None:
+        previous_page = self.learn_page
+        if event.type == pygame.MOUSEWHEEL:
+            self.learn_scroll = max(0, min(getattr(self, "_learn_max_scroll", 0), self.learn_scroll - event.y * 40))
         if self._btn_learn_next.handle_event(event) and self.learn_page < len(LEARN_PAGES) - 1:
             self.learn_page += 1
         if self._btn_learn_back.handle_event(event) and self.learn_page > 0:
@@ -956,8 +980,11 @@ class DriftSyncApplication:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             cx = self._cx
             for i in range(len(LEARN_PAGES)):
-                if pygame.Rect(cx, 36 + i * 34, 200, 30).collidepoint(event.pos):
+                if pygame.Rect(cx + 24, 82 + i * 48, 230, 40).collidepoint(event.pos):
                     self.learn_page = i
+
+        if previous_page != self.learn_page:
+            self.learn_scroll = 0
 
     def _render_screen_header(self, title: str) -> None:
         cx = self._cx
@@ -965,9 +992,9 @@ class DriftSyncApplication:
         hline(self.screen, 50, cx, W)
         draw_text(self.screen, title, self.f_head, TEXT, cx + 14, 13)
         self._hdr_home_btn = Button(
-            pygame.Rect(W - 118, 8, 106, 34), "< Home",
+            pygame.Rect(W - 118, 8, 106, 34), "Workspace",
             self.f_btn_sm, color=PANEL2, text_color=DIM, hover_text=ACCENT)
-        mx, my = pygame.mouse.get_pos()
+        mx, my = self._mouse()
         self._hdr_home_btn.hovered = self._hdr_home_btn.rect.collidepoint(mx, my)
         self._hdr_home_btn.draw(self.screen)
 
@@ -976,12 +1003,12 @@ class DriftSyncApplication:
     def _build_demo_buttons(self) -> None:
         cx = self._cx + 12
         self._btn_demo_start = Button(
-            pygame.Rect(cx, 58, 140, 40), "Start Pipeline",
+            pygame.Rect(cx, 58, 140, 40), "Start training",
             self.f_btn, accent_fill=True)
-        self._btn_demo_start.disabled = (self.demo_worker.status != "idle")
+        self._btn_demo_start.disabled = (self.demo_worker.status == "running")
 
         self.demo_view_results_btn = Button(
-            pygame.Rect(W - 180, 58, 168, 40), "View Results ->",
+            pygame.Rect(W - 180, 58, 168, 40), "View results",
             self.f_btn, accent_fill=True)
         self.demo_view_results_btn.disabled = True
 
@@ -989,17 +1016,17 @@ class DriftSyncApplication:
             pygame.Rect(cx, 108, 230, 34), self.f_body, placeholder="Run name (optional)")
 
         self._btn_trials_minus = Button(
-            pygame.Rect(cx + 252, 108, 32, 34), "-", self.f_btn,
+            pygame.Rect(cx + 322, 108, 34, 34), "-", self.f_btn,
             color=PANEL2, text_color=TEXT, hover_text=ACCENT)
         self._btn_trials_plus = Button(
-            pygame.Rect(cx + 252 + 74, 108, 32, 34), "+", self.f_btn,
+            pygame.Rect(cx + 414, 108, 34, 34), "+", self.f_btn,
             color=PANEL2, text_color=TEXT, hover_text=ACCENT)
 
         self._btn_sessions_minus = Button(
-            pygame.Rect(cx + 430, 108, 32, 34), "-", self.f_btn,
+            pygame.Rect(cx + 550, 108, 34, 34), "-", self.f_btn,
             color=PANEL2, text_color=TEXT, hover_text=ACCENT)
         self._btn_sessions_plus = Button(
-            pygame.Rect(cx + 430 + 76, 108, 32, 34), "+", self.f_btn,
+            pygame.Rect(cx + 642, 108, 34, 34), "+", self.f_btn,
             color=PANEL2, text_color=TEXT, hover_text=ACCENT)
 
     def _render_demo(self) -> None:
@@ -1009,14 +1036,15 @@ class DriftSyncApplication:
         done  = self.demo_worker.status == "done"
         error = self.demo_worker.status == "error"
 
-        self._render_screen_header("ML Pipeline Demo")
+        self._render_screen_header("Train models")
         sc  = GREEN if done else RED if error else YELLOW if run else DIM
         slb = {"idle": "idle", "running": "running...", "done": "done", "error": "error"}.get(
             self.demo_worker.status, "")
-        draw_text(self.screen, slb, self.f_body, sc, W - 14, 16, anchor="topright")
+        draw_text(self.screen, slb, self.f_body, sc, W - 148, 16, anchor="topright")
 
         if hasattr(self, "_btn_demo_start"):
-            self._btn_demo_start.disabled = not idle
+            self._btn_demo_start.disabled = run
+            self._btn_demo_start.text = "Start training" if idle else "Training..." if run else "New run"
             self._btn_demo_start.draw(self.screen)
         if self.demo_view_results_btn:
             self.demo_view_results_btn.draw(self.screen)
@@ -1025,16 +1053,16 @@ class DriftSyncApplication:
             dt = self.clock.get_time() / 1000.0
             self._demo_name_input.draw(self.screen, dt)
 
-            draw_text(self.screen, "Trials:", self.f_small, DIM, cx + 256, 112)
+            draw_text(self.screen, "Trials:", self.f_small, DIM, cx + 262, 114)
             self._btn_trials_minus.draw(self.screen)
             draw_text(self.screen, str(self.demo_num_trials), self.f_body, TEXT,
-                      cx + 298, 113, anchor="midtop")
+                      cx + 397, 114, anchor="midtop")
             self._btn_trials_plus.draw(self.screen)
 
-            draw_text(self.screen, "Sessions:", self.f_small, DIM, cx + 434, 112)
+            draw_text(self.screen, "Sessions:", self.f_small, DIM, cx + 475, 114)
             self._btn_sessions_minus.draw(self.screen)
             draw_text(self.screen, str(self.demo_num_sessions), self.f_body, TEXT,
-                      cx + 474, 113, anchor="midtop")
+                      cx + 625, 114, anchor="midtop")
             self._btn_sessions_plus.draw(self.screen)
 
         step  = self.demo_worker.current_step
@@ -1056,30 +1084,35 @@ class DriftSyncApplication:
         log_rect = pygame.Rect(cx + 12, panel_y, LOG_W, H - panel_y - 14)
         draw_rect(self.screen, log_rect, PANEL, 5)
         draw_border(self.screen, log_rect, BORDER, 5)
-        draw_text(self.screen, "log", self.f_small, DIM, log_rect.left + 8, log_rect.top + 6)
+        draw_text(self.screen, "Training log", self.f_small, DIM, log_rect.left + 8, log_rect.top + 6)
         hline(self.screen, log_rect.top + 22, log_rect.left, log_rect.right)
 
         lh       = self.f_mono.get_height() + 2
         vis_lines = (log_rect.height - 26) // lh
         start_idx = max(0, len(self.demo_logs) - vis_lines)
+        if not self.demo_logs:
+            ui.paragraph(self.screen, "Training output will appear here.\nRuns use generated synthetic task sessions.",
+                         pygame.Rect(log_rect.x + 20, log_rect.y + 48, log_rect.width - 40, 100), self.f_body)
+        self.screen.set_clip(log_rect.inflate(-12, -4))
         ly = log_rect.top + 26
         for line in self.demo_logs[start_idx:]:
             col = GREEN if any(k in line.lower() for k in ("complete", "done", "saved")) else \
                   RED   if "error" in line.lower() else \
                   YELLOW if any(k in line.lower() for k in ("training", "epoch", "generating", "preprocessing")) \
                   else TEXT
-            s = self.f_mono.render(line[:96], True, col)
+            s = self.f_mono.render(line[:78], True, col)
             self.screen.blit(s, (log_rect.left + 8, ly))
             ly += lh
             if ly > log_rect.bottom - 4:
                 break
 
+        self.screen.set_clip(None)
         mx_r     = cx + 12 + LOG_W + 10
         mw       = W - mx_r - 12
         met_rect = pygame.Rect(mx_r, panel_y, mw, H - panel_y - 14)
         draw_rect(self.screen, met_rect, PANEL, 5)
         draw_border(self.screen, met_rect, BORDER, 5)
-        draw_text(self.screen, "metrics", self.f_small, DIM, met_rect.left + 8, met_rect.top + 6)
+        draw_text(self.screen, "Model performance", self.f_small, DIM, met_rect.left + 8, met_rect.top + 6)
         hline(self.screen, met_rect.top + 22, met_rect.left, met_rect.right)
 
         m = self.demo_metrics
@@ -1137,15 +1170,23 @@ class DriftSyncApplication:
                 draw_text(self.screen, "0.70", self.f_small, DIM, ar.right + 3, thr_y)
         else:
             msg = {
-                "idle":    "Configure above and click Start Pipeline.",
+                "idle":    "Configure a run above to begin training. Epoch metrics will appear here.",
                 "running": "Waiting for first epoch...",
                 "done":    "Complete.",
                 "error":   f"Error: {self.demo_worker.error_msg[:58]}",
             }.get(self.demo_worker.status, "")
-            draw_text(self.screen, msg, self.f_body, TEXT,
-                      met_rect.centerx, met_rect.centery, anchor="center")
+            ui.paragraph(self.screen, msg, met_rect.inflate(-40, -90), self.f_body, DIM)
 
     def _handle_demo_event(self, event) -> None:
+        if self.demo_worker.status in ("done", "error") and self._btn_demo_start.handle_event(event):
+            self.demo_worker = DemoWorker()
+            self.demo_logs.clear()
+            self.demo_metrics.clear()
+            self.demo_train_loss.clear()
+            self.demo_val_loss.clear()
+            self.demo_val_auc.clear()
+            self._build_demo_buttons()
+            return
         if hasattr(self, "_hdr_home_btn") and self._hdr_home_btn.handle_event(event):
             self.state = State.MENU
             return
@@ -1187,9 +1228,9 @@ class DriftSyncApplication:
             return []
         runs = []
         for d in sorted(base.iterdir(), reverse=True):
-            if d.is_dir() and d.name != "checkpoints" and any(d.glob("*.png")):
+            if d.is_dir() and d.name != "checkpoints" and (any(d.glob("*.png")) or (d / "comparison_summary.json").exists()):
                 runs.append(d)
-        if any(base.glob("*.png")):
+        if any(base.glob("*.png")) or (base / "comparison_summary.json").exists() or (base / "experiment_summary.json").exists():
             runs.append(base)
         return runs
 
@@ -1207,9 +1248,21 @@ class DriftSyncApplication:
                 if surf:
                     self.result_thumbs.append((surf, p.stem.replace("_", " ").title(), p))
             jp = sel / "comparison_summary.json"
+            if not jp.exists():
+                jp = sel / "experiment_summary.json"
             if jp.exists():
-                with open(jp) as f:
-                    self.result_metrics = json.load(f)
+                try:
+                    with open(jp, encoding="utf-8") as f:
+                        raw_metrics = json.load(f)
+                    self.result_metrics = {
+                        key: value.get("test_metrics", value)
+                        for key, value in raw_metrics.items()
+                        if isinstance(value, dict) and ("test_metrics" in value or "accuracy" in value)
+                    }
+                except (OSError, ValueError, AttributeError) as exc:
+                    self.result_metrics = {}
+                    self.notice = f"Unable to read run metrics: {exc}"
+
             else:
                 self.result_metrics = {}
         else:
@@ -1338,9 +1391,10 @@ class DriftSyncApplication:
         oy += 8
 
         if not self.result_thumbs:
-            draw_text(self.screen, "This run has metrics but no plots yet.", self.f_body, DIM, cx + 20, oy + 20)
-            draw_text(self.screen, "Generate plots from Full Demo or rerun the experiment pipeline.",
+            draw_text(self.screen, "Experiment metrics", self.f_body, DIM, cx + 20, oy + 20)
+            draw_text(self.screen, "Saved evaluation results. Train models to generate inspectable plots.",
                       self.f_small, DIM, cx + 20, oy + 44)
+            self._render_metrics_table(cx + 24, oy + 94)
             return
 
         tw, th = 290, 196
@@ -1350,9 +1404,10 @@ class DriftSyncApplication:
         ox     = cx + ((W - cx) - (cols * tw + (cols - 1) * gap)) // 2
         vis_h  = H - oy - 56
 
-        max_scroll = max(0, math.ceil(len(self.result_thumbs) / cols) * row_h - vis_h)
+        max_scroll = max(0, math.ceil(len(self.result_thumbs) / cols) * row_h + (160 if self.result_metrics else 0) - vis_h)
         self.result_scroll = max(0, min(self.result_scroll, max_scroll))
 
+        self.screen.set_clip(pygame.Rect(cx, oy, W - cx, vis_h))
         for i, (surf, title, _) in enumerate(self.result_thumbs):
             col = i % cols
             row = i // cols
@@ -1371,7 +1426,8 @@ class DriftSyncApplication:
             if table_y < H - 56:
                 self._render_metrics_table(ox, table_y)
 
-        draw_text(self.screen, "scroll: wheel   click: enlarge",
+        self.screen.set_clip(None)
+        draw_text(self.screen, "Scroll to explore    Click a plot to inspect",
                   self.f_small, DIM, cx + 12, H - 14, anchor="bottomleft")
 
     def _render_metrics_table(self, x: int, y: int) -> None:
@@ -1381,7 +1437,7 @@ class DriftSyncApplication:
         y += 28
         headers   = ["Model", "Accuracy", "F1", "AUC", "ECE"]
         col_names = ["accuracy", "f1", "roc_auc", "ece"]
-        col_w     = [110, 100, 80, 80, 80]
+        col_w     = [174, 112, 92, 92, 92]
         hx = x
         for h, cw in zip(headers, col_w):
             draw_text(self.screen, h, self.f_small, DIM, hx, y)
@@ -1422,6 +1478,7 @@ class DriftSyncApplication:
         self._btn_export_csv = Button(
             pygame.Rect(W - 340, oy - 28, 108, 26), "Export CSV",
             self.f_btn_sm, color=PANEL2, text_color=DIM, hover_text=GREEN)
+        self._btn_export_csv.disabled = not self.human_sessions
         self._btn_export_csv.draw(self.screen)
 
         if not self.human_sessions:
@@ -1430,7 +1487,7 @@ class DriftSyncApplication:
                       self.f_small, DIM, cx + 20, oy + 44)
             return
 
-        cols_x = [cx + 12, cx + 44, cx + 220, cx + 390, cx + 456, cx + 534]
+        cols_x = [cx + 20, cx + 60, cx + 330, cx + 540, cx + 640, cx + 780]
         hdrs   = ["#", "Name", "Date", "Trials", "Accuracy", "Avg RT"]
         for hx, hdr in zip(cols_x, hdrs):
             draw_text(self.screen, hdr, self.f_small, DIM, hx, oy)
@@ -1443,6 +1500,7 @@ class DriftSyncApplication:
         max_sc = max(0, len(self.human_sessions) * row_h - vis_h)
         self.human_scroll = max(0, min(self.human_scroll, max_sc))
 
+        self.screen.set_clip(pygame.Rect(cx, oy, W - cx, vis_h))
         for i, sess in enumerate(self.human_sessions):
             y      = oy + i * row_h - self.human_scroll
             if y < oy - row_h or y > H - 160:
@@ -1460,6 +1518,7 @@ class DriftSyncApplication:
             draw_text(self.screen, f"{sess['accuracy']:.1%}", self.f_body,  acc_col, cols_x[4], y + 6)
             draw_text(self.screen, f"{sess['avg_rt']:.3f}s",  self.f_small, DIM,     cols_x[5], y + 7)
 
+        self.screen.set_clip(None)
         detail_y = H - 165
         hline(self.screen, detail_y, cx, W)
         if self.human_selected is not None and self.human_selected < len(self.human_sessions):
@@ -1557,7 +1616,7 @@ class DriftSyncApplication:
                     row = i // cols
                     tx  = ox + col * (tw + gap)
                     ty  = oy + row * row_h - self.result_scroll
-                    if pygame.Rect(tx, ty, tw, th).collidepoint(event.pos):
+                    if pygame.Rect(cx, oy, W - cx, H - oy - 56).collidepoint(event.pos) and pygame.Rect(tx, ty, tw, th).collidepoint(event.pos):
                         full = load_png(path)
                         if full:
                             self.result_full_view  = full
@@ -1577,7 +1636,7 @@ class DriftSyncApplication:
                 row_h  = 28
                 for i in range(len(self.human_sessions)):
                     y = oy + i * row_h - self.human_scroll
-                    if pygame.Rect(cx + 8, y, W - cx - 20, row_h - 2).collidepoint(event.pos):
+                    if oy <= event.pos[1] < H - 160 and pygame.Rect(cx + 8, y, W - cx - 20, row_h - 2).collidepoint(event.pos):
                         self.human_selected = i
                         return
 
@@ -1610,22 +1669,23 @@ class DriftSyncApplication:
             pygame.Rect(cx + 326 + 78, WY, 34, 36), "+", self.f_btn,
             color=PANEL2, text_color=TEXT, hover_text=ACCENT)
         self._btn_play_start = Button(
-            pygame.Rect(cx, BTY, 210, 46), "Start Task",
+            pygame.Rect(cx, BTY, 210, 46), "Start task",
             self.f_btn, accent_fill=True)
         self._btn_play_skip_calib = Button(
             pygame.Rect(cx + 226, BTY, 180, 46), "Skip Calibration",
             self.f_btn, color=PANEL2, text_color=DIM, hover_text=ACCENT)
         self._btn_play_human_results = Button(
-            pygame.Rect(cx, AFTY + 28, 260, 42), "View Human Sessions ->",
+            pygame.Rect(cx, 450, 260, 42), "View recorded sessions",
             self.f_btn, color=PANEL2, text_color=TEXT, hover_text=ACCENT)
 
     def _render_play_task(self) -> None:
         cx  = self._cx
         x   = cx + 24
         WY   = 236   # widget row y
-        AFTY = 348   # after-task row y
+        AFTY = 408
+        BTY = 286
 
-        self._render_screen_header("Play the Cognitive Task")
+        self._render_screen_header("Record a task")
 
         instrs = [
             "A shape appears: Circle, Square, or Triangle.",
@@ -1649,10 +1709,12 @@ class DriftSyncApplication:
             self._play_name_input.draw(self.screen, self.clock.get_time() / 1000.0)
         self._btn_play_trials_minus.draw(self.screen)
         draw_text(self.screen, str(self.play_num_trials), self.f_sub, TEXT,
-                  x + 367, WY + 2, anchor="midtop")
+                  x + 382, WY + 4, anchor="midtop")
         self._btn_play_trials_plus.draw(self.screen)
 
         self._btn_play_start.draw(self.screen)
+        self._btn_play_skip_calib.text = "Calibration: off" if self._play_skip_calib else "Calibration: on"
+        self._btn_play_skip_calib.text_color = YELLOW if self._play_skip_calib else TEXT
         self._btn_play_skip_calib.draw(self.screen)
 
         # Calibration status
@@ -1668,9 +1730,12 @@ class DriftSyncApplication:
         draw_text(self.screen, f"Calibration: {calib_lbl}", self.f_small, calib_col, x, BTY + 56)
 
         if self._play_task_done:
-            draw_text(self.screen, "Session saved ->  driftsync/data/raw/",
+            draw_text(self.screen, "Session saved in driftsync/data/raw/",
                       self.f_body, GREEN, x, AFTY)
             self._btn_play_human_results.draw(self.screen)
+
+        if self.notice:
+            ui.paragraph(self.screen, self.notice, pygame.Rect(x, 510, 780, 100), self.f_body, YELLOW)
 
         draw_text(self.screen, "ESC = menu   |   SPACE = skip   |   Click = respond",
                   self.f_small, DIM, cx + 14, H - 16, anchor="bottomleft")
@@ -1700,48 +1765,41 @@ class DriftSyncApplication:
     # LIVE MODE
 
     def _render_live_mode(self) -> None:
-        cx = self._cx
-
-        self._render_screen_header("Live AI Inference Mode")
-
-        x, y = cx + 24, 66
-        lines = [
-            "Play the task while the AI predicts your drift in real-time.",
-            "A DRIFT PROBABILITY gauge shows at the top of the simulator.",
-            "When P(error) > 0.65 the screen flashes red as a warning.",
-            "The uncertainty band shows how confident the AI is.",
-            "",
-            "Note: train a model first by running the Full Demo.",
-        ]
-        for line in lines:
-            if not line:
-                y += 10
-                continue
-            draw_text(self.screen, line, self.f_body, TEXT, x, y)
-            y += 22
-        y += 16
-
-        draw_text(self.screen, "Model:", self.f_body, TEXT, x, y)
-        y += 22
+        self._render_screen_header("Live session")
+        x = self._cx + 40
+        draw_text(self.screen, "Observe your focus in real time", self.f_title, TEXT, x, 106)
+        ui.paragraph(self.screen, "Complete the shape task while a sequence model estimates the chance of an error in the next five trials.",
+                     pygame.Rect(x, 168, 730, 72), self.f_body)
+        draw_text(self.screen, "Prediction model", self.f_sub, TEXT, x, 264)
+        self._live_model_rects = {}
         for i, (label, key) in enumerate([("LSTM", "lstm"), ("Transformer", "transformer")]):
-            active = (self.live_model_choice == key)
-            r = pygame.Rect(x + i * 170, y, 158, 38)
-            draw_rect(self.screen, r, PANEL2 if active else PANEL, 5)
-            if active:
-                pygame.draw.rect(self.screen, ACCENT, pygame.Rect(r.left, r.top, 4, r.height), border_radius=5)
-            draw_border(self.screen, r, ACCENT if active else BORDER, 5)
-            draw_text(self.screen, label, self.f_body, TEXT if active else DIM,
-                      r.centerx, r.centery, anchor="center")
-        y += 50
-
-        btn = Button(pygame.Rect(x, y, 200, 46), "Launch Live Mode", self.f_btn, accent_fill=True)
-        mx2, my2 = pygame.mouse.get_pos()
-        btn.hovered = btn.rect.collidepoint(mx2, my2)
-        btn.draw(self.screen)
-        self._live_btn = btn
-
-        draw_text(self.screen, "L = LSTM   T = Transformer", self.f_small, DIM, x, y + 56)
-        draw_text(self.screen, "ESC = menu", self.f_small, DIM, W - 14, H - 16, anchor="bottomright")
+            rect = pygame.Rect(x + i * 202, 304, 186, 48)
+            self._live_model_rects[key] = rect
+            active = self.live_model_choice == key
+            draw_rect(self.screen, rect, PANEL2 if active else PANEL)
+            draw_border(self.screen, rect, ACCENT if active else BORDER)
+            draw_text(self.screen, label + ("  / selected" if active else ""), self.f_body,
+                      TEXT if active else DIM, *rect.center, "center")
+        from driftsync.realtime.checkpoints import resolve_checkpoint_path
+        from driftsync.configs import RealtimeConfig
+        try:
+            resolve_checkpoint_path(self.live_model_choice, RealtimeConfig().checkpoint_dir)
+            status = "Checkpoint available. Predictions begin after 20 trials."
+        except FileNotFoundError:
+            status = "No trained checkpoint. The session will record behaviour only."
+        draw_text(self.screen, status, self.f_body, DIM, x, 378)
+        self._live_btn = getattr(self, "_live_btn", Button(pygame.Rect(x, 424, 220, 48), "Start live session", self.f_btn, accent_fill=True))
+        self._live_btn.hovered = self._live_btn.rect.collidepoint(self._mouse())
+        self._live_btn.draw(self.screen)
+        draw_text(self.screen, "L / T  Choose model     Tab / Enter  Start", self.f_small, DIM, x, 490)
+        hline(self.screen, 554, x, W - 40)
+        columns = [("Error risk", "Probability of an error within the prediction horizon."),
+                   ("Model uncertainty", "Spread across dropout passes. Reported as standard deviation."),
+                   ("Prediction confidence", "A calibrated confidence score is not available from this model.")]
+        for i, (label, description) in enumerate(columns):
+            xx = x + i * 330
+            draw_text(self.screen, label, self.f_sub, TEXT, xx, 588)
+            ui.paragraph(self.screen, description, pygame.Rect(xx, 630, 290, 90), self.f_body)
 
     def _handle_live_event(self, event) -> None:
         if hasattr(self, "_hdr_home_btn") and self._hdr_home_btn.handle_event(event):
@@ -1753,9 +1811,8 @@ class DriftSyncApplication:
             elif event.key == pygame.K_t:
                 self.live_model_choice = "transformer"
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            cx, y = self._cx + 24, 66 + 6 * 22 + 26 + 22
-            for i, (_, key) in enumerate([("lstm", "lstm"), ("transformer", "transformer")]):
-                if pygame.Rect(cx + i * 170, y, 158, 38).collidepoint(event.pos):
+            for key, rect in getattr(self, "_live_model_rects", {}).items():
+                if rect.collidepoint(event.pos):
                     self.live_model_choice = key
         if hasattr(self, "_live_btn") and self._live_btn.handle_event(event):
             self._launch_live_mode()
@@ -1764,46 +1821,55 @@ class DriftSyncApplication:
 
     def _reinit_pygame(self) -> None:
         pygame.init()
-        flags = pygame.FULLSCREEN | pygame.SCALED if self.fullscreen else pygame.RESIZABLE
-        self.screen = pygame.display.set_mode((W, H), flags)
+        self.viewport = ui.Viewport((W, H), "DriftSync | Focus analysis")
+        self.screen = self.viewport.surface
         pygame.display.set_caption("DriftSync  [F11 = fullscreen]")
         self.clock  = pygame.time.Clock()
         self._init_fonts()
         self._build_menu_buttons()
         self._build_learn_buttons()
         self._build_play_task_buttons()
+        self._build_demo_buttons()
+        if hasattr(self, "_live_btn"):
+            del self._live_btn
 
     def _launch_play_task(self) -> None:
         name       = getattr(self, "_play_session_name", "")
         trials     = getattr(self, "play_num_trials", 150)
         skip_calib = getattr(self, "_play_skip_calib", False)
+        self.notice = ""
+        self._play_task_done = False
         pygame.quit()
         try:
             from driftsync.configs import SimulatorConfig
             from driftsync.simulator.gui import DriftSimulator
-            DriftSimulator(
+            saved_path = DriftSimulator(
                 SimulatorConfig(num_trials=trials, session_name=name),
                 skip_calibration=skip_calib,
             ).run()
+            self._play_task_done = bool(saved_path)
+            if not saved_path:
+                self.notice = "Session setup canceled. No task data saved."
         except Exception as e:
-            print(f"Simulator error: {e}")
+            self.notice = f"Task could not finish: {e}. Try starting a new session."
         finally:
             self._reinit_pygame()
             self.state = State.PLAY_TASK
-            self._play_task_done = True
 
     def _launch_live_mode(self) -> None:
+        self.notice = ""
         pygame.quit()
         try:
             from driftsync.configs import SimulatorConfig, RealtimeConfig
             from driftsync.realtime.live_simulator import LiveDriftSimulator
-            LiveDriftSimulator(
+            saved_path = LiveDriftSimulator(
                 SimulatorConfig(num_trials=150),
                 RealtimeConfig(model_type=self.live_model_choice),
                 model_type=self.live_model_choice,
             ).run()
+            self.notice = "Live session saved. Open Results to review it." if saved_path else "Session canceled. Existing recordings are unchanged."
         except Exception as e:
-            print(f"Live mode error: {e}")
+            self.notice = f"Live session could not finish: {e}. Check the model and retry."
         finally:
             self._reinit_pygame()
             self.state = State.MENU

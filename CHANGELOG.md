@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-20 - Desktop workspace redesign
+
+- Shared charcoal/teal design system and native desktop typography across setup,
+  training, results, task, calibration and live analysis.
+- Resizable canvases with mapped pointer input, keyboard focus and navigation.
+- Separate live risk, uncertainty and unavailable calibrated confidence; real
+  prediction history with threshold, standard deviation band and hover inspection.
+- Fixed task-setup crash, model-selection hitboxes, plot dismissal, training restart,
+  results access and canceled-session/calibration persistence.
+- Added reproducible UI captures and headless UI regression tests.
+
 ## 2026-08-25 - Showcase v3
 
 - Added replay timeline generation that merges task sessions with realtime prediction logs.

@@ -27,6 +27,9 @@ from pathlib import Path
 import numpy as np
 import pygame
 
+from driftsync import ui
+from driftsync.realtime.presentation import render_live
+
 from driftsync.configs import SimulatorConfig, RealtimeConfig, CONFIG
 from driftsync.simulator.task_engine import TaskEngine
 from driftsync.simulator.scenarios import SCENARIOS, apply_scenario
@@ -38,19 +41,12 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Colours
 # ---------------------------------------------------------------------------
-BG_COLOR        = (15,  15,  25)
-TEXT_COLOR      = (220, 220, 220)
-RULE_COLOR      = (100, 220, 255)
-TARGET_COLOR    = (80,  200, 120)
-DISTRACT_COLOR  = (220,  80,  80)
-TIMER_OK        = (80,  200, 120)
-TIMER_WARN      = (240, 180,  50)
-TIMER_CRIT      = (220,  60,  60)
-GAUGE_LOW       = (80,  200, 120)
-GAUGE_MED       = (240, 180,  50)
-GAUGE_HIGH      = (220,  60,  60)
-WARNING_BG      = (200,  40,  40, 80)
-UNCERTAINTY_COL = (180, 130, 255)
+BG_COLOR, TEXT_COLOR, RULE_COLOR = ui.BG, ui.TEXT, ui.ACCENT
+TARGET_COLOR, DISTRACT_COLOR = ui.GREEN, ui.RED
+TIMER_OK, TIMER_WARN, TIMER_CRIT = ui.ACCENT, ui.YELLOW, ui.RED
+GAUGE_LOW, GAUGE_MED, GAUGE_HIGH = ui.GREEN, ui.YELLOW, ui.RED
+WARNING_BG = (*ui.RED, 30)
+UNCERTAINTY_COL = ui.DIM
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +186,7 @@ class LiveDriftSimulator:
             self._explainer = None
 
         self._prob_history: deque = deque(maxlen=rt_cfg.display_history)
-        self._prob_history.append(0.0)
+        self._unc_history: deque = deque(maxlen=rt_cfg.display_history)
 
         self._last_prob      = 0.0
         self._last_unc       = 0.0
@@ -205,18 +201,23 @@ class LiveDriftSimulator:
         self._error_events:   list = []
 
     def run(self) -> str:
-        """Run live simulator. Returns path to saved session."""
+        """Return a saved session path, or an empty string when setup is canceled."""
         pygame.init()
         W, H = self.sim_cfg.window_width, self.sim_cfg.window_height
         pygame.display.set_caption("DriftSync — Live Inference")
-        screen = pygame.display.set_mode((W, H))
+        self.viewport = ui.Viewport((W + 400, max(H, 900)), "DriftSync | Live session", (1280, 886))
+        screen = self.viewport.surface
         clock  = pygame.time.Clock()
 
-        font_large = pygame.font.SysFont("Consolas", 30, bold=True)
-        font_med   = pygame.font.SysFont("Consolas", 20)
-        font_small = pygame.font.SysFont("Consolas", 14)
+        font_large = ui.font(30, True)
+        font_med   = ui.font(20)
+        font_small = ui.font(14)
 
-        # Load model (non-blocking attempt)
+        ui.session_message(screen, [("Loading prediction model", font_large, ui.TEXT),
+                                   ("Preparing the live workspace...", font_med, ui.DIM)])
+        self.viewport.present()
+        pygame.event.pump()
+        # Model loading preserves the existing checkpoint/inference path.
         try:
             self.inference.load_model(self._model_type)
             self._model_ready = True
@@ -227,7 +228,10 @@ class LiveDriftSimulator:
                 "Train quickly with: python run_experiment.py --quick"
             )
 
-        self._show_intro(screen, font_large, font_med, clock)
+        begin = self._show_intro(screen, font_large, font_med, clock)
+        if begin == "quit":
+            pygame.quit()
+            return ""
 
         while not self.engine.is_finished:
             stimulus = self.engine.next_stimulus()
@@ -236,11 +240,14 @@ class LiveDriftSimulator:
                 break
 
         lead_metrics = compute_lead_time_metrics(self._warning_events, self._error_events)
+        if not self.engine.session_data.trials:
+            pygame.quit()
+            return ""
         self._show_outro(screen, font_large, font_med, clock, lead_metrics)
         pygame.quit()
 
         path = self.engine.save_session()
-        if self._model_ready:
+        if self._model_ready and self.inference._log:
             self.inference.save_log()
         self._save_session_metrics(str(path), lead_metrics)
         return str(path)
@@ -264,7 +271,8 @@ class LiveDriftSimulator:
                 rt, action = time_window, "timeout"
                 break
 
-            for event in pygame.event.get():
+            for raw_event in pygame.event.get():
+                event = self.viewport.event(raw_event)
                 if event.type == pygame.QUIT:
                     self.engine.record_trial(shape, "timeout", elapsed)
                     return "quit"
@@ -301,7 +309,9 @@ class LiveDriftSimulator:
             self._last_prob    = prob
             self._last_unc     = unc
             self._warning_flag = warn
-            self._prob_history.append(prob)
+            if len(self.inference._feat_buffer) >= self.inference._seq_len:
+                self._prob_history.append(prob)
+                self._unc_history.append(unc)
 
             # Update last feature vector for sklearn model display
             feat_buf = list(self.inference._feat_buffer)
@@ -338,88 +348,14 @@ class LiveDriftSimulator:
 
     def _render(self, screen, font_large, font_med, font_small,
                 shape, sx, sy, radius, rule, elapsed, time_window):
-        screen.fill(BG_COLOR)
-
-        # Warning overlay
-        if self._warning_flag:
-            overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-            overlay.fill(WARNING_BG)
-            screen.blit(overlay, (0, 0))
-            warn_surf = font_large.render("⚠  COGNITIVE DRIFT DETECTED", True, GAUGE_HIGH)
-            screen.blit(warn_surf, (
-                screen.get_width() // 2 - warn_surf.get_width() // 2,
-                screen.get_height() - 75
-            ))
-
-        # Rule
-        rule_surf = font_large.render(f"CLICK  {rule}S", True, RULE_COLOR)
-        screen.blit(rule_surf, (screen.get_width() // 2 - rule_surf.get_width() // 2, 12))
-
-        # Trial counter
-        t_surf = font_small.render(
-            f"Trial {self.engine.trial_count + 1}/{self.sim_cfg.num_trials}", True, TEXT_COLOR
-        )
-        screen.blit(t_surf, (12, 14))
-
-        # Timer bar
-        W = screen.get_width()
-        bar_w = W - 40
-        ratio = 1.0 - elapsed / time_window
-        bar_color = TIMER_OK if ratio > 0.5 else TIMER_WARN if ratio > 0.25 else TIMER_CRIT
-        pygame.draw.rect(screen, (40, 40, 55), (20, 55, bar_w, 10), border_radius=4)
-        if ratio > 0:
-            pygame.draw.rect(screen, bar_color, (20, 55, int(bar_w * ratio), 10), border_radius=4)
-
-        # Drift gauge
-        if self._model_ready:
-            draw_drift_gauge(
-                screen, 20, 75, bar_w - 200, 18,
-                self._last_prob, self._last_unc, font_small,
-            )
-            # Sparkline
-            draw_sparkline(screen, self._prob_history, W - 210, 75, 190, 50)
-        else:
-            no_model = font_small.render(
-                "(no checkpoint - run: python run_experiment.py --quick)",
-                True,
-                (120, 128, 142),
-            )
-            screen.blit(no_model, (20, 78))
-
-        # Stimulus
-        is_target = (shape == rule)
-        SHAPE_DRAWERS[shape](screen, TARGET_COLOR if is_target else DISTRACT_COLOR, sx, sy, radius)
-        lbl = font_small.render(shape, True, TEXT_COLOR)
-        screen.blit(lbl, (sx - lbl.get_width() // 2, sy + radius + 8))
-
-        # Explanation panel (shown when risk >= 0.40)
-        if self._explanation:
-            exp_y = screen.get_height() - 22 - (len(self._explanation) * 16) - 10
-            bg = pygame.Surface((W - 40, len(self._explanation) * 16 + 8), pygame.SRCALPHA)
-            bg.fill((20, 20, 35, 180))
-            screen.blit(bg, (20, exp_y - 4))
-            for i, line in enumerate(self._explanation):
-                col = GAUGE_HIGH if i == 0 else TEXT_COLOR
-                s = font_small.render(line, True, col)
-                screen.blit(s, (24, exp_y + i * 16))
-
-        # Model mode label
-        mode_lbl = self._sklearn_mode if not self._model_ready else self._model_type.upper()
-        mode_surf = font_small.render(f"Mode: {mode_lbl}", True, (80, 80, 100))
-        screen.blit(mode_surf, (W - mode_surf.get_width() - 8, screen.get_height() - 22))
-
-        # Footer
-        hint = font_small.render("Click shape  |  SPACE = skip  |  ESC = quit", True, (70, 70, 80))
-        screen.blit(hint, (W // 2 - hint.get_width() // 2, screen.get_height() - 22))
-
-        pygame.display.flip()
+        render_live(self, screen, shape, sx, sy, radius, rule, elapsed, time_window, SHAPE_DRAWERS)
+        self.viewport.present()
 
     def _flash_feedback(self, screen, is_correct, clock):
-        color = (40, 180, 80) if is_correct else (180, 40, 40)
-        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        overlay.fill((*color, 70))
-        screen.blit(overlay, (0, 0))
-        pygame.display.flip()
+        color = ui.GREEN if is_correct else ui.RED
+        pygame.draw.rect(screen, ui.PANEL2, (28, 112, 165, 30), border_radius=4)
+        ui.text(screen, "Correct response" if is_correct else "Incorrect response", ui.font(14), color, 38, 117)
+        self.viewport.present()
         t = time.time()
         while time.time() - t < 0.15:
             pygame.event.pump()
@@ -438,26 +374,22 @@ class LiveDriftSimulator:
             (f"{model_status}", font_med, (160, 255, 160) if self._model_ready else GAUGE_HIGH),
             ("", font_med, TEXT_COLOR),
             ("The drift probability gauge updates after each trial.", font_med, TEXT_COLOR),
-            ("A RED overlay means high error risk predicted.", font_med, GAUGE_HIGH),
+            ("Risk and model uncertainty are shown separately.", font_med, GAUGE_HIGH),
             ("", font_med, TEXT_COLOR),
             ("Press ENTER to begin", font_large, (100, 220, 255)),
         ]
         waiting = True
         while waiting:
-            for event in pygame.event.get():
+            for raw_event in pygame.event.get():
+                event = self.viewport.event(raw_event)
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    return "quit"
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    return "quit"
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                     waiting = False
-            screen.fill(BG_COLOR)
-            total_h = sum(fnt.get_height() + 4 for _, fnt, _ in lines)
-            y = (H - total_h) // 2
-            for text, fnt, color in lines:
-                surf = fnt.render(text, True, color)
-                screen.blit(surf, (W // 2 - surf.get_width() // 2, y))
-                y += fnt.get_height() + 4
-            pygame.display.flip()
+            ui.session_message(screen, lines)
+            self.viewport.present()
             clock.tick(60)
 
     def _show_outro(self, screen, font_large, font_med, clock, lead_metrics: dict = None):
@@ -481,25 +413,22 @@ class LiveDriftSimulator:
             (f"Errors predicted early: {predicted}   Missed: {missed}", font_med, TEXT_COLOR),
             (f"Avg lead time: {avg_lead:.2f}s   False warnings: {fp_warns}", font_med, TEXT_COLOR),
             ("", font_med, TEXT_COLOR),
-            ("Data and session metrics saved.", font_med, (160, 200, 160)),
+            ("Press Enter to save session data and metrics.", font_med, (160, 200, 160)),
             ("Press ENTER or close window.", font_med, TEXT_COLOR),
         ]
         t0 = time.time()
         waiting = True
         while waiting and time.time() - t0 < 15:
-            for event in pygame.event.get():
+            for raw_event in pygame.event.get():
+                event = self.viewport.event(raw_event)
                 if event.type == pygame.QUIT:
                     return
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    return "quit"
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                     waiting = False
-            screen.fill(BG_COLOR)
-            total_h = sum(fnt.get_height() + 4 for _, fnt, _ in lines)
-            y = (H - total_h) // 2
-            for text, fnt, color in lines:
-                surf = fnt.render(text, True, color)
-                screen.blit(surf, (W // 2 - surf.get_width() // 2, y))
-                y += fnt.get_height() + 4
-            pygame.display.flip()
+            ui.session_message(screen, lines)
+            self.viewport.present()
             clock.tick(60)
 
     def _save_session_metrics(self, session_path: str, lead_metrics: dict) -> None:
