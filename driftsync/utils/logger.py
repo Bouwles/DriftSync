@@ -1,8 +1,4 @@
-"""
-Logging Utilities
-=================
-Structured console and file logging for DriftSync.
-"""
+"""Configure console and file logging for DriftSync."""
 
 import logging
 import sys

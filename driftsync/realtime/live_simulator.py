@@ -1,18 +1,7 @@
-"""
-Live Inference Simulator
-=========================
-Integrates the task simulator with the real-time inference engine.
-At every trial completion:
-  1. The inference engine receives the new observation.
-  2. P(error_next_K) and uncertainty are computed.
-  3. If P > threshold, a coloured drift warning overlay is shown.
+"""Run the attention task with live risk estimates and session recording.
 
-The HUD shows a live "Drift Probability" gauge that updates every trial.
-
-Usage
------
-    python -m driftsync.realtime.live_simulator
-    python -m driftsync.realtime.live_simulator --model transformer
+Run `python -m driftsync.realtime.live_simulator --model transformer`
+to select the Transformer instead of the default LSTM.
 """
 
 import argparse
@@ -38,9 +27,6 @@ from driftsync.utils import get_logger, compute_lead_time_metrics
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Colours
-# ---------------------------------------------------------------------------
 BG_COLOR, TEXT_COLOR, RULE_COLOR = ui.BG, ui.TEXT, ui.ACCENT
 TARGET_COLOR, DISTRACT_COLOR = ui.GREEN, ui.RED
 TIMER_OK, TIMER_WARN, TIMER_CRIT = ui.ACCENT, ui.YELLOW, ui.RED
@@ -49,9 +35,7 @@ WARNING_BG = (*ui.RED, 30)
 UNCERTAINTY_COL = ui.DIM
 
 
-# ---------------------------------------------------------------------------
 # Shape drawing (same as simulator.gui)
-# ---------------------------------------------------------------------------
 
 def draw_circle(surface, color, x, y, r):
     pygame.draw.circle(surface, color, (x, y), r)
@@ -70,10 +54,6 @@ def draw_triangle(surface, color, x, y, r):
 SHAPE_DRAWERS = {"CIRCLE": draw_circle, "SQUARE": draw_square, "TRIANGLE": draw_triangle}
 
 
-# ---------------------------------------------------------------------------
-# Gauge rendering
-# ---------------------------------------------------------------------------
-
 def draw_drift_gauge(
     screen: pygame.Surface,
     x: int, y: int, w: int, h: int,
@@ -82,10 +62,8 @@ def draw_drift_gauge(
     font,
 ) -> None:
     """Render a horizontal probability gauge bar with uncertainty shading."""
-    # Background
     pygame.draw.rect(screen, (30, 30, 45), (x, y, w, h), border_radius=4)
 
-    # Fill colour
     if probability < 0.4:
         bar_color = GAUGE_LOW
     elif probability < 0.65:
@@ -111,17 +89,11 @@ def draw_drift_gauge(
     thresh_x = x + int(w * CONFIG.realtime.warning_threshold)
     pygame.draw.line(screen, (255, 255, 255), (thresh_x, y - 3), (thresh_x, y + h + 3), 2)
 
-    # Border
     pygame.draw.rect(screen, (70, 70, 90), (x, y, w, h), 2, border_radius=4)
 
-    # Label
     lbl = font.render(f"Drift P: {probability:.2f}  ±{uncertainty:.2f}", True, TEXT_COLOR)
     screen.blit(lbl, (x + w + 10, y))
 
-
-# ---------------------------------------------------------------------------
-# History sparkline
-# ---------------------------------------------------------------------------
 
 def draw_sparkline(
     screen: pygame.Surface,
@@ -147,14 +119,8 @@ def draw_sparkline(
     pygame.draw.line(screen, GAUGE_HIGH, (x, ty), (x + w, ty), 1)
 
 
-# ---------------------------------------------------------------------------
-# Main live simulator
-# ---------------------------------------------------------------------------
-
 class LiveDriftSimulator:
-    """
-    Pygame-based simulator with live cognitive drift prediction overlay.
-    """
+    """Pygame-based simulator with live cognitive drift prediction overlay."""
 
     def __init__(self, sim_cfg: SimulatorConfig, rt_cfg: RealtimeConfig, model_type: str = "lstm"):
         self.sim_cfg   = sim_cfg
@@ -217,7 +183,6 @@ class LiveDriftSimulator:
                                    ("Preparing the live workspace...", font_med, ui.DIM)])
         self.viewport.present()
         pygame.event.pump()
-        # Model loading preserves the existing checkpoint/inference path.
         try:
             self.inference.load_model(self._model_type)
             self._model_ready = True
@@ -252,7 +217,6 @@ class LiveDriftSimulator:
         self._save_session_metrics(str(path), lead_metrics)
         return str(path)
 
-    # ------------------------------------------------------------------
 
     def _run_trial(self, screen, clock, stimulus, font_large, font_med, font_small) -> str:
         shape      = stimulus["shape"]
@@ -297,7 +261,6 @@ class LiveDriftSimulator:
 
         now = time.time()
 
-        # Feed to inference engine
         if self._model_ready:
             prob, unc, warn = self.inference.update(
                 reaction_time=rt,
@@ -344,7 +307,6 @@ class LiveDriftSimulator:
         self._flash_feedback(screen, trial.is_correct, clock)
         return "ok"
 
-    # ------------------------------------------------------------------
 
     def _render(self, screen, font_large, font_med, font_small,
                 shape, sx, sy, radius, rule, elapsed, time_window):
@@ -454,10 +416,6 @@ class LiveDriftSimulator:
             json.dump(summary, f, indent=2)
         logger.info("Session metrics saved -> %s", out_path)
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def build_simulator_config(num_trials: int, scenario: str | None = None) -> SimulatorConfig:
     """Build the live simulator config, optionally applying a showcase scenario."""

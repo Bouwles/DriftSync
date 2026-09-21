@@ -1,34 +1,8 @@
-"""
-Transformer Encoder-Based Drift Predictor
-==========================================
-Causal (masked) multi-head self-attention encoder stack for temporal
-sequence modelling.
+"""Causal Transformer with sinusoidal positions and pre-normalized encoder layers.
 
-Architecture
-------------
-    Input (B, L, F)
-        ↓
-    Input Projection  (Linear -> LayerNorm)
-        ↓
-    Sinusoidal Positional Encoding
-        ↓
-    ┌─────────────────────────────────────┐
-    │  TransformerEncoderLayer × N        │
-    │  (MultiHeadSelfAttention            │
-    │   + Pre-LN + FFN + Dropout)         │
-    └─────────────────────────────────────┘
-        ↓
-    Global Average Pooling over sequence
-        ↓
-    Classification Head (Linear -> GELU -> Dropout -> Linear)
-        ↓
-    Logit (B,)
-
-Notes
------
-- Pre-LayerNorm (vs. post-LN) for training stability.
-- Causal mask ensures no look-ahead during training/inference.
-- Attention weights are stored after last forward pass for visualisation.
+Accepts (batch, sequence, features) and returns one logit per batch item.
+Final normalization and mean pooling feed the classifier. Attention weights
+from the last forward pass are retained for visualization.
 """
 
 from __future__ import annotations
@@ -43,10 +17,6 @@ from typing import Optional
 from driftsync.models.base import DriftPredictor
 from driftsync.configs import TransformerConfig
 
-
-# ---------------------------------------------------------------------------
-# Positional Encoding
-# ---------------------------------------------------------------------------
 
 class SinusoidalPositionalEncoding(nn.Module):
     """
@@ -80,10 +50,6 @@ class SinusoidalPositionalEncoding(nn.Module):
         x = x + self.pe[:, : x.size(1)]
         return self.dropout(x)
 
-
-# ---------------------------------------------------------------------------
-# Pre-LN Transformer Encoder Layer
-# ---------------------------------------------------------------------------
 
 class PreLNTransformerLayer(nn.Module):
     """
@@ -131,7 +97,7 @@ class PreLNTransformerLayer(nn.Module):
         x: torch.Tensor,
         attn_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # --- Self-Attention block ---
+        # Self-Attention block
         normed = self.norm1(x)
         attn_out, attn_weights = self.self_attn(
             normed, normed, normed,
@@ -142,14 +108,10 @@ class PreLNTransformerLayer(nn.Module):
         self.last_attn_weights = attn_weights.detach()
         x = x + attn_out
 
-        # --- FFN block ---
+        # FFN block
         x = x + self.ffn(self.norm2(x))
         return x
 
-
-# ---------------------------------------------------------------------------
-# Transformer Drift Predictor
-# ---------------------------------------------------------------------------
 
 class TransformerDriftPredictor(DriftPredictor):
     """
@@ -165,20 +127,17 @@ class TransformerDriftPredictor(DriftPredictor):
 
         d = self.cfg.d_model
 
-        # --- Input projection ---
         self.input_proj = nn.Sequential(
             nn.Linear(self.cfg.input_dim, d),
             nn.LayerNorm(d),
         )
 
-        # --- Positional encoding ---
         self.pos_enc = SinusoidalPositionalEncoding(
             d_model=d,
             max_len=self.cfg.max_seq_len,
             dropout=self.cfg.dropout,
         )
 
-        # --- Encoder stack ---
         self.encoder_layers = nn.ModuleList([
             PreLNTransformerLayer(
                 d_model=d,
@@ -191,7 +150,6 @@ class TransformerDriftPredictor(DriftPredictor):
 
         self.final_norm = nn.LayerNorm(d)
 
-        # --- Classification head ---
         self.head = nn.Sequential(
             nn.Linear(d, d // 2),
             nn.GELU(),
@@ -201,9 +159,6 @@ class TransformerDriftPredictor(DriftPredictor):
 
         self._init_weights()
 
-    # ------------------------------------------------------------------
-    # Weight initialisation
-    # ------------------------------------------------------------------
 
     def _init_weights(self) -> None:
         """Xavier / Glorot uniform initialisation for all linear layers."""
@@ -216,9 +171,7 @@ class TransformerDriftPredictor(DriftPredictor):
                 nn.init.ones_(module.weight)
                 nn.init.zeros_(module.bias)
 
-    # ------------------------------------------------------------------
     # Causal mask
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
@@ -232,9 +185,6 @@ class TransformerDriftPredictor(DriftPredictor):
         mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
         return mask.bool()
 
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -246,14 +196,12 @@ class TransformerDriftPredictor(DriftPredictor):
         """
         B, L, _ = x.shape
 
-        # Project + positional encode
         out = self.input_proj(x)   # (B, L, d_model)
         out = self.pos_enc(out)
 
         # Causal attention mask
         mask = self._causal_mask(L, x.device)
 
-        # Encoder stack
         for layer in self.encoder_layers:
             out = layer(out, attn_mask=mask)
 
@@ -265,9 +213,6 @@ class TransformerDriftPredictor(DriftPredictor):
         logits = self.head(pooled).squeeze(-1)   # (B,)
         return logits
 
-    # ------------------------------------------------------------------
-    # Attention visualisation
-    # ------------------------------------------------------------------
 
     def get_attention_maps(self) -> list[torch.Tensor]:
         """

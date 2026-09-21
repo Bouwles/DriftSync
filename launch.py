@@ -1,31 +1,12 @@
-"""
-DriftSync Launcher
-==================
-Single entry point for the DriftSync application.
-
-This script:
-1. Checks for required Python packages.
-2. Prints a clear install command if packages are missing.
-3. Launches the full interactive Pygame GUI application.
-
-Usage
------
-    python launch.py
-
-No other setup required.
-"""
+"""Launch the desktop app and check dependencies when running from source."""
 
 import sys
 import os
 import subprocess
 import importlib
 
-# ---------------------------------------------------------------------------
-# Ensure we're in the right directory (DriftSync project root)
-# ---------------------------------------------------------------------------
 if getattr(sys, "frozen", False):
-    # Running inside a PyInstaller bundle; __file__ points to the temp
-    # extraction folder.  Use the directory that contains the .exe instead.
+    # Bundled apps keep writable data beside the executable, outside _internal.
     SCRIPT_DIR = os.path.dirname(sys.executable)
 else:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,22 +15,17 @@ os.chdir(SCRIPT_DIR)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-# ---------------------------------------------------------------------------
-# Required packages: (import_name, pip_package, description)
-# ---------------------------------------------------------------------------
 REQUIRED = [
-    ("numpy",      "numpy>=1.24.0",       "NumPy - numerical computing"),
-    ("sklearn",    "scikit-learn>=1.3.0", "Scikit-learn - metrics and ML utilities"),
-    ("matplotlib", "matplotlib>=3.7.0",   "Matplotlib - plot generation"),
-    ("torch",      "torch",               "PyTorch - deep learning framework"),
-    ("pygame",     "pygame>=2.5.0",       "Pygame - interactive GUI"),
+    ("numpy", "numpy>=1.24.0", "NumPy - numerical computing"),
+    ("sklearn", "scikit-learn>=1.3.0", "Scikit-learn - metrics and ML utilities"),
+    ("matplotlib", "matplotlib>=3.7.0", "Matplotlib - plot generation"),
+    ("torch", "torch", "PyTorch - deep learning framework"),
+    ("pygame", "pygame>=2.5.0", "Pygame - interactive GUI"),
 ]
 
 
 def _pip_install(pip_spec: str, label: str) -> bool:
-    """
-    Run pip install for one package. Returns True on success.
-    """
+    """Install one package and return whether pip succeeded."""
     print(f"    Installing {label} ...", flush=True)
     try:
         subprocess.check_call(
@@ -81,12 +57,9 @@ def auto_install_dependencies() -> bool:
 
 
 def ensure_dependencies() -> bool:
-    """
-    Check all required packages; install missing ones.
+    """Check dependencies, installing missing packages only when opted in.
 
-    Returns:
-        True if all packages are available (or were successfully installed).
-        False if any installation failed.
+    Return False if packages remain missing or installation fails.
     """
     missing = find_missing_dependencies()
 
@@ -136,10 +109,6 @@ def ensure_dependencies() -> bool:
     return all_ok
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
 def main() -> None:
     if "--version" in sys.argv:
         from driftsync import __version__
@@ -156,14 +125,12 @@ def main() -> None:
     print("  DriftSync: Real-Time Cognitive Drift Prediction")
     print()
 
-    # When running as a PyInstaller bundle all packages are already included;
-    # skip the pip installer completely (sys.executable is the .exe, not python).
+    # A bundled executable already includes its dependencies and cannot run pip.
     if not getattr(sys, "frozen", False):
         if not ensure_dependencies():
             print("Cannot start - dependency installation failed.")
             sys.exit(1)
 
-    # All deps available; launch the application
     try:
         from driftsync.app.application import DriftSyncApplication
     except ImportError as e:

@@ -1,15 +1,7 @@
-"""
-Rule-Based Explainability
-==========================
-When DriftSync generates a high risk score, this module produces a plain-text
-explanation of the main contributing factors.
+"""Describe behavioural changes relative to a personal baseline or fixed norms.
 
-The explanations compare the current rolling performance statistics against
-the user's personal baseline (from calibration) or against fixed norms if
-calibration has not been done.
-
-This is intentionally rule-based so it works without model introspection.
-SHAP or attention-based explanations could be added in the future.
+These rule-based observations do not attribute a neural model's prediction
+to individual features.
 """
 
 from typing import List, Optional, TYPE_CHECKING

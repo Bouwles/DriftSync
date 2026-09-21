@@ -1,13 +1,7 @@
-"""
-Training Loop
-=============
-Implements:
-  - Full training loop with BCE loss.
-  - Early stopping based on validation loss.
-  - ReduceLROnPlateau learning rate scheduling.
-  - Gradient clipping.
-  - Best-model checkpointing.
-  - Per-epoch metric logging.
+"""Train with weighted BCE, gradient clipping, and validation-based early stopping.
+
+Tracks per-epoch metrics, reduces the learning rate on plateaus, and saves
+the best checkpoint.
 """
 
 import time
@@ -27,10 +21,6 @@ from driftsync.utils import get_logger, compute_classification_metrics
 
 logger = get_logger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Epoch helpers
-# ---------------------------------------------------------------------------
 
 def _run_epoch(
     model: DriftPredictor,
@@ -81,10 +71,6 @@ def _run_epoch(
     )
 
 
-# ---------------------------------------------------------------------------
-# Trainer class
-# ---------------------------------------------------------------------------
-
 class Trainer:
     """
     Manages the training lifecycle for a DriftPredictor model.
@@ -111,7 +97,7 @@ class Trainer:
         self.cfg     = cfg
         self.device  = device
 
-        # --- Compute positive class weight for imbalanced data ---
+        # Compute positive class weight for imbalanced data
         all_labels = np.concatenate([y.numpy() for _, y in train_loader])
         n_pos = all_labels.sum()
         n_neg = len(all_labels) - n_pos
@@ -134,7 +120,6 @@ class Trainer:
             min_lr=cfg.min_lr,
         )
 
-        # --- History ---
         self.history: Dict[str, List[float]] = {
             "train_loss": [], "val_loss": [],
             "train_acc":  [], "val_acc":  [],
@@ -142,17 +127,12 @@ class Trainer:
             "val_auc":    [], "lr":       [],
         }
 
-        # --- Early stopping state ---
         self._best_val_loss = float("inf")
         self._patience_counter = 0
         self._best_epoch = 0
 
-        # --- Checkpoint dir ---
         Path(cfg.checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------------------
-    # Main training loop
-    # ------------------------------------------------------------------
 
     def train(self, on_epoch_end=None) -> Dict[str, List[float]]:
         """
@@ -177,25 +157,21 @@ class Trainer:
         for epoch in range(1, self.cfg.max_epochs + 1):
             ep_t0 = time.time()
 
-            # --- Train ---
             train_loss, train_labels, train_proba = _run_epoch(
                 self.model, self.train_loader, self.criterion,
                 self.optimizer, self.device, self.cfg.grad_clip, train=True,
             )
             train_metrics = compute_classification_metrics(train_labels, train_proba)
 
-            # --- Validate ---
             val_loss, val_labels, val_proba = _run_epoch(
                 self.model, self.val_loader, self.criterion,
                 None, self.device, self.cfg.grad_clip, train=False,
             )
             val_metrics = compute_classification_metrics(val_labels, val_proba)
 
-            # --- LR scheduler ---
             current_lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step(val_loss)
 
-            # --- Record history ---
             self.history["train_loss"].append(train_loss)
             self.history["val_loss"].append(val_loss)
             self.history["train_acc"].append(train_metrics["accuracy"])
@@ -218,7 +194,7 @@ class Trainer:
                     val_metrics["roc_auc"], ep_time,
                 )
 
-            # --- Epoch callback (for live UI progress) ---
+            # Epoch callback (for live UI progress)
             if on_epoch_end is not None:
                 on_epoch_end(epoch, {
                     "train_loss": train_loss,
@@ -229,7 +205,6 @@ class Trainer:
                     "max_epochs": self.cfg.max_epochs,
                 })
 
-            # --- Checkpointing ---
             improved = val_loss < self._best_val_loss - self.cfg.early_stop_delta
             if improved:
                 self._best_val_loss = val_loss
@@ -239,7 +214,7 @@ class Trainer:
             else:
                 self._patience_counter += 1
 
-            # --- Early stopping ---
+            # Early stopping
             if self._patience_counter >= self.cfg.early_stop_patience:
                 logger.info(
                     "Early stopping at epoch %d (best=%d, val_loss=%.4f)",
@@ -254,9 +229,6 @@ class Trainer:
         )
         return self.history
 
-    # ------------------------------------------------------------------
-    # Checkpointing
-    # ------------------------------------------------------------------
 
     def _save_checkpoint(self, epoch: int, val_loss: float, is_best: bool = False) -> None:
         model_name = type(self.model).__name__.lower().replace("driftpredictor", "")

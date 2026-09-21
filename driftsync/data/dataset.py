@@ -1,18 +1,7 @@
-"""
-Sequence Dataset
-================
-Converts preprocessed trial DataFrames into fixed-length sequence
-windows and wraps them in a PyTorch Dataset.
+"""Build fixed-length feature windows and PyTorch data loaders.
 
-Sequence window of length L ending at trial i:
-    X[i] = features[i-L+1 : i+1]   shape: (L, num_features)
-    y[i] = label[i]                 binary scalar
-
-Split strategy:
-    Chronological split by session ordering (no data leakage).
-    Training sessions -> train set.
-    Next sessions     -> val set.
-    Last sessions     -> test set.
+A window ending at trial i contains features[i-L+1:i+1] and label[i].
+Chronological splitting preserves window order; it does not group by session.
 """
 
 import numpy as np
@@ -38,17 +27,12 @@ FEATURE_COLS = [
     "streak_incorrect",
     "target_match",
     "action_click",
-    # Extended features (v2)
     "rolling_rt_variance",
     "time_since_last_error_norm",
     "rt_trend",
     "fatigue_index",
 ]
 
-
-# ---------------------------------------------------------------------------
-# Sequence extraction
-# ---------------------------------------------------------------------------
 
 def extract_sequences(
     df: pd.DataFrame,
@@ -121,10 +105,6 @@ def build_sequences_from_df(
     return X, y
 
 
-# ---------------------------------------------------------------------------
-# Train / Val / Test split
-# ---------------------------------------------------------------------------
-
 def split_data(
     X: np.ndarray,
     y: np.ndarray,
@@ -158,10 +138,6 @@ def split_data(
     return (X_train, y_train), (X_val, y_val), (X_test, y_test)
 
 
-# ---------------------------------------------------------------------------
-# PyTorch Dataset
-# ---------------------------------------------------------------------------
-
 class CognitiveDriftDataset(Dataset):
     """
     PyTorch Dataset wrapping (X, y) sequence arrays.
@@ -181,10 +157,6 @@ class CognitiveDriftDataset(Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.X[idx], self.y[idx]
 
-
-# ---------------------------------------------------------------------------
-# DataLoader factory
-# ---------------------------------------------------------------------------
 
 def make_dataloaders(
     X_train: np.ndarray, y_train: np.ndarray,
@@ -209,10 +181,6 @@ def make_dataloaders(
 
     return train_loader, val_loader, test_loader
 
-
-# ---------------------------------------------------------------------------
-# Persistence
-# ---------------------------------------------------------------------------
 
 def save_processed(X: np.ndarray, y: np.ndarray, out_dir: str) -> None:
     """Save processed arrays to disk."""

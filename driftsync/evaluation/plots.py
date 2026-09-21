@@ -1,15 +1,4 @@
-"""
-Visualisation Library
-=====================
-All publication-quality plots for DriftSync experiments:
-
-  - ROC curves (single and comparative)
-  - Confusion matrices (with annotation)
-  - Calibration plots (reliability diagrams)
-  - Attention heatmaps (Transformer)
-  - Training history curves
-  - Inference speed bar chart
-"""
+"""Plot model metrics, calibration, attention weights, and training history."""
 
 from __future__ import annotations
 
@@ -26,9 +15,7 @@ from sklearn.metrics import ConfusionMatrixDisplay
 
 from driftsync.utils import compute_ece, compute_roc_curve, compute_confusion_matrix
 
-# ---------------------------------------------------------------------------
 # Style defaults
-# ---------------------------------------------------------------------------
 
 STYLE = {
     "figure.facecolor":  "#171b1e",
@@ -67,10 +54,6 @@ def save_fig(fig: plt.Figure, path: str | Path, dpi: int = 150) -> None:
     plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
-# ROC Curves
-# ---------------------------------------------------------------------------
-
 def plot_roc_curves(
     results: Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]],
     out_path: str | Path,
@@ -105,10 +88,6 @@ def plot_roc_curves(
     save_fig(fig, out_path)
 
 
-# ---------------------------------------------------------------------------
-# Confusion Matrix
-# ---------------------------------------------------------------------------
-
 def plot_confusion_matrix(
     y_true: np.ndarray,
     y_proba: np.ndarray,
@@ -116,9 +95,7 @@ def plot_confusion_matrix(
     out_path: str | Path,
     threshold: float = 0.5,
 ) -> None:
-    """
-    Plot an annotated confusion matrix.
-    """
+    """Plot an annotated confusion matrix."""
     _apply_style()
     cm = compute_confusion_matrix(y_true, y_proba, threshold)
 
@@ -151,10 +128,6 @@ def plot_confusion_matrix(
 
     save_fig(fig, out_path)
 
-
-# ---------------------------------------------------------------------------
-# Calibration Plot (Reliability Diagram)
-# ---------------------------------------------------------------------------
 
 def plot_calibration(
     results: Dict[str, Tuple[np.ndarray, np.ndarray]],
@@ -199,18 +172,12 @@ def plot_calibration(
     save_fig(fig, out_path)
 
 
-# ---------------------------------------------------------------------------
-# Training History
-# ---------------------------------------------------------------------------
-
 def plot_training_history(
     history: Dict[str, list],
     model_name: str,
     out_path: str | Path,
 ) -> None:
-    """
-    4-panel training history: loss, accuracy, F1, learning rate.
-    """
+    """4-panel training history: loss, accuracy, F1, learning rate."""
     _apply_style()
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle(f"Training History — {model_name.upper()}", fontsize=14, fontweight="bold")
@@ -245,17 +212,11 @@ def plot_training_history(
     save_fig(fig, out_path)
 
 
-# ---------------------------------------------------------------------------
-# Inference Speed
-# ---------------------------------------------------------------------------
-
 def plot_inference_speed(
     speed_data: Dict[str, float],   # {model_name: ms_per_sample}
     out_path: str | Path,
 ) -> None:
-    """
-    Bar chart comparing inference latency in ms per sample.
-    """
+    """Bar chart comparing inference latency in ms per sample."""
     _apply_style()
     fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -278,10 +239,6 @@ def plot_inference_speed(
 
     save_fig(fig, out_path)
 
-
-# ---------------------------------------------------------------------------
-# Attention Heatmap (Transformer)
-# ---------------------------------------------------------------------------
 
 def plot_attention_heatmap(
     attn_weights: np.ndarray,
@@ -317,19 +274,13 @@ def plot_attention_heatmap(
     save_fig(fig, out_path)
 
 
-# ---------------------------------------------------------------------------
-# Combined model comparison bar chart
-# ---------------------------------------------------------------------------
-
 def plot_metric_comparison(
     metrics: Dict[str, Dict[str, float]],   # {model: {metric: value}}
     metric_names: List[str],
     out_path: str | Path,
     title: str = "Model Comparison",
 ) -> None:
-    """
-    Grouped bar chart comparing selected metrics across models.
-    """
+    """Grouped bar chart comparing selected metrics across models."""
     _apply_style()
     n_metrics = len(metric_names)
     n_models  = len(metrics)

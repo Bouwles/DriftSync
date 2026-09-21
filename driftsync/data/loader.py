@@ -1,9 +1,4 @@
-"""
-Session Data Loader
-===================
-Loads raw JSON session files, validates them, and converts to flat
-pandas DataFrames for further processing.
-"""
+"""Validate raw session JSON and flatten trial records into pandas DataFrames."""
 
 from __future__ import annotations
 

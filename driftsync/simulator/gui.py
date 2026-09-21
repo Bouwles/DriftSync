@@ -1,20 +1,7 @@
-"""
-Simulator GUI
-=============
-Pygame-based interactive cognitive task.
+"""Pygame attention task with calibration and session recording.
 
-Controls
---------
-- Mouse click on the stimulus shape -> "click" action
-- Spacebar / right-click to SKIP (no click = the player judges it wrong shape)
-- ESC to end session early
-
-Displays
---------
-- Current rule ("Click CIRCLES")
-- Score, accuracy, trial count
-- Countdown bar for current trial's time window
-- Fatigue / drift warning overlay (high error rate indicator)
+Click a matching stimulus, press Space or right-click to skip, and press
+Escape to end the session. The display tracks accuracy and remaining time.
 """
 
 from __future__ import annotations
@@ -41,19 +28,12 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Colour palette
-# ---------------------------------------------------------------------------
 BG_COLOR, TEXT_COLOR, RULE_COLOR = ui.BG, ui.TEXT, ui.ACCENT
 TARGET_COLOR, DISTRACT_COLOR = ui.GREEN, ui.RED
 TIMER_OK, TIMER_WARN, TIMER_CRIT = ui.ACCENT, ui.YELLOW, ui.RED
 SCORE_COLOR = ui.TEXT
 DRIFT_OVERLAY = (*ui.RED, 30)
 
-
-# ---------------------------------------------------------------------------
-# Shape drawing helpers
-# ---------------------------------------------------------------------------
 
 def draw_circle(surface: pygame.Surface, color, x: int, y: int, r: int) -> None:
     pygame.draw.circle(surface, color, (x, y), r, 0)
@@ -83,10 +63,6 @@ SHAPE_DRAWERS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Main simulator class
-# ---------------------------------------------------------------------------
-
 class DriftSimulator:
     """
     Pygame cognitive task simulator.
@@ -104,9 +80,6 @@ class DriftSimulator:
         self.baseline         = None
         self._calibration_cancelled = False
 
-    # ------------------------------------------------------------------
-    # Public entry point
-    # ------------------------------------------------------------------
 
     def run(self) -> str:
         """Return the session file path, or an empty string when setup is canceled."""
@@ -153,9 +126,6 @@ class DriftSimulator:
         path = self.engine.save_session()
         return str(path)
 
-    # ------------------------------------------------------------------
-    # Calibration
-    # ------------------------------------------------------------------
 
     def _run_calibration(
         self,
@@ -174,7 +144,6 @@ class DriftSimulator:
 
         Returns a BaselineStats object, or None on failure.
         """
-        # Show calibration intro screen
         calib_lines = [
             ("Personal calibration", font_large, RULE_COLOR),
             ("", font_med, TEXT_COLOR),
@@ -221,7 +190,6 @@ class DriftSimulator:
             baseline.mean_rt, baseline.accuracy * 100,
         )
 
-        # Show calibration summary
         acc_val = baseline.accuracy
         summary_lines = [
             ("Calibration Complete", font_large, RULE_COLOR),
@@ -285,9 +253,7 @@ class DriftSimulator:
             if action is not None:
                 break
 
-            # Render calibration frame
             screen.fill(BG_COLOR)
-            # Calibration header
             cal_surf = font_large.render("Calibration", True, ui.YELLOW)
             screen.blit(cal_surf, (self.cfg.window_width // 2 - cal_surf.get_width() // 2, 8))
             prog_surf = font_small.render(f"Trial {completed + 1} / {total}", True, TEXT_COLOR)
@@ -295,7 +261,6 @@ class DriftSimulator:
             rule_surf = font_med.render(f"Click {rule}S", True, RULE_COLOR)
             screen.blit(rule_surf, (self.cfg.window_width // 2 - rule_surf.get_width() // 2, 44))
 
-            # Timer bar
             bar_w = self.cfg.window_width - 40
             ratio = max(0, 1.0 - elapsed / time_window)
             bar_color = TIMER_OK if ratio > 0.5 else TIMER_WARN if ratio > 0.25 else TIMER_CRIT
@@ -309,7 +274,6 @@ class DriftSimulator:
             if prog_frac > 0:
                 pygame.draw.rect(screen, ui.ACCENT, (20, 82, int(bar_w * prog_frac), 6), border_radius=3)
 
-            # Stimulus
             is_target = (shape == rule)
             SHAPE_DRAWERS[shape](screen, TARGET_COLOR if is_target else DISTRACT_COLOR, sx, sy, radius)
             lbl = font_small.render(shape, True, TEXT_COLOR)
@@ -324,9 +288,6 @@ class DriftSimulator:
         self._flash_feedback(screen, trial.is_correct, clock)
         return "ok"
 
-    # ------------------------------------------------------------------
-    # Trial execution
-    # ------------------------------------------------------------------
 
     def _run_trial(
         self,
@@ -355,13 +316,11 @@ class DriftSimulator:
         while True:
             elapsed = time.time() - trial_start
 
-            # --- timeout ---
             if elapsed >= time_window:
                 rt = time_window
                 action = "timeout"
                 break
 
-            # --- events ---
             for raw_event in pygame.event.get():
                 event = self.viewport.event(raw_event)
                 if event.type == pygame.QUIT:
@@ -387,7 +346,6 @@ class DriftSimulator:
             if action is not None:
                 break
 
-            # --- render ---
             self._render_frame(
                 screen, font_large, font_med, font_small,
                 shape, sx, sy, radius, rule, elapsed, time_window,
@@ -398,9 +356,6 @@ class DriftSimulator:
         self._flash_feedback(screen, trial.is_correct, clock)
         return "ok"
 
-    # ------------------------------------------------------------------
-    # Rendering helpers
-    # ------------------------------------------------------------------
 
     def _render_frame(
         self,
@@ -422,7 +377,6 @@ class DriftSimulator:
                     24, self.cfg.window_height - 62)
         ui.signal_mark(screen, 22, 21, 22)
 
-        # --- HUD top bar ---
         rule_surf = font_large.render(f"Click {rule.lower()}s", True, RULE_COLOR)
         screen.blit(rule_surf, (self.cfg.window_width // 2 - rule_surf.get_width() // 2, 12))
 
@@ -431,14 +385,12 @@ class DriftSimulator:
         )
         screen.blit(trial_surf, (54, 24))
 
-        # Accuracy
         trials_done = self.engine.session_data.trials
         if trials_done:
             acc = sum(t.is_correct for t in trials_done) / len(trials_done)
             acc_surf = font_small.render(f"Accuracy: {acc:.1%}", True, SCORE_COLOR)
             screen.blit(acc_surf, (self.cfg.window_width - 120, 14))
 
-        # --- Timer bar ---
         bar_w = self.cfg.window_width - 40
         bar_h = 5
         bar_x, bar_y = 20, 68
@@ -453,7 +405,6 @@ class DriftSimulator:
         pygame.draw.rect(screen, ui.PANEL2, (bar_x, bar_y, bar_w, bar_h), border_radius=4)
         pygame.draw.rect(screen, bar_color, (bar_x, bar_y, int(bar_w * ratio), bar_h), border_radius=4)
 
-        # --- Stimulus ---
         is_target = (shape == rule)
         color = TARGET_COLOR if is_target else DISTRACT_COLOR
         SHAPE_DRAWERS[shape](screen, color, sx, sy, radius)
@@ -462,7 +413,6 @@ class DriftSimulator:
         lbl = font_small.render(shape, True, TEXT_COLOR)
         screen.blit(lbl, (sx - lbl.get_width() // 2, sy + radius + 8))
 
-        # --- Footer hint ---
         hint = font_small.render("Click shape  |  SPACE = skip  |  ESC = quit", True, ui.DIM)
         screen.blit(hint, (self.cfg.window_width // 2 - hint.get_width() // 2,
                             self.cfg.window_height - 28))
@@ -480,9 +430,6 @@ class DriftSimulator:
             pygame.event.pump()
             clock.tick(self.cfg.fps)
 
-    # ------------------------------------------------------------------
-    # Intro / outro screens
-    # ------------------------------------------------------------------
 
     def _show_intro(self, screen, font_large, font_med, clock) -> None:
         lines = [

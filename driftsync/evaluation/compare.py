@@ -1,22 +1,7 @@
-"""
-Model Comparison Engine
-========================
-Rigorously compares LSTM vs Transformer on the held-out test set.
+"""Compare trained LSTM and Transformer checkpoints on the held-out test set.
 
-Outputs
--------
-  - Printed comparison table.
-  - ROC comparison plot.
-  - Per-model confusion matrices.
-  - Calibration reliability diagram.
-  - Inference speed benchmark.
-  - Attention heatmaps (Transformer).
-  - Metric comparison bar chart.
-  - JSON summary saved to results dir.
-
-Usage
------
-    python -m driftsync.evaluation.compare
+Saves metrics, plots, inference timings, and a JSON summary to the results
+directory. Run with `python -m driftsync.evaluation.compare`.
 """
 
 from __future__ import annotations
@@ -54,10 +39,6 @@ from driftsync.evaluation.plots import (
 logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Checkpoint loading
-# ---------------------------------------------------------------------------
-
 def load_trained_model(model_type: str, device: torch.device):
     """Load model from best checkpoint saved during training."""
     ckpt_dir = Path(CONFIG.training.checkpoint_dir)
@@ -84,10 +65,6 @@ def load_trained_model(model_type: str, device: torch.device):
     logger.info("Loaded %s checkpoint (epoch %d)", model_type.upper(), ckpt["epoch"])
     return model
 
-
-# ---------------------------------------------------------------------------
-# Inference helpers
-# ---------------------------------------------------------------------------
 
 def evaluate_model(
     model,
@@ -144,10 +121,6 @@ def benchmark_inference_speed(
     return ms_per_sample
 
 
-# ---------------------------------------------------------------------------
-# Main comparison function
-# ---------------------------------------------------------------------------
-
 def run_comparison(
     data_cfg: DataConfig | None = None,
     results_dir: str | None = None,
@@ -168,7 +141,6 @@ def run_comparison(
 
     device = get_device(CONFIG.training.device)
 
-    # --- Load processed data ---
     X, y = load_processed(str(data_cfg.processed_data_dir))
     _, _, (X_test, y_test) = split_data(
         X, y,
@@ -197,10 +169,8 @@ def run_comparison(
             logger.warning(str(e))
             continue
 
-        # --- Test predictions ---
         y_true, y_proba = evaluate_model(model, test_loader, device)
 
-        # --- Metrics ---
         metrics = compute_classification_metrics(y_true, y_proba, CONFIG.evaluation.threshold)
         ece, _, _, _ = compute_ece(y_true, y_proba, CONFIG.evaluation.calibration_bins)
         metrics["ece"] = ece
@@ -213,7 +183,6 @@ def run_comparison(
         metrics["auc_ci_lo"] = auc_lo
         metrics["auc_ci_hi"] = auc_hi
 
-        # --- Inference speed ---
         ms = benchmark_inference_speed(model, test_loader, device)
         metrics["inference_ms_per_sample"] = ms
 
@@ -229,7 +198,6 @@ def run_comparison(
         speed_data[mtype]  = ms
         summary[mtype]     = metrics
 
-        # --- Per-model plots ---
         plot_confusion_matrix(
             y_true, y_proba, mtype,
             results_dir / f"{mtype}_confusion_matrix.png",
@@ -250,7 +218,7 @@ def run_comparison(
         logger.error("No model results available. Train models first.")
         return {}
 
-    # --- Comparative plots ---
+    # Comparative plots
     plot_roc_curves(roc_data, results_dir / "roc_comparison.png")
     plot_calibration(calib_data, results_dir / "calibration_comparison.png")
     plot_inference_speed(speed_data, results_dir / "inference_speed.png")
@@ -261,10 +229,8 @@ def run_comparison(
         title="LSTM vs Transformer — DriftSync",
     )
 
-    # --- Print summary table ---
     _print_table(metric_data)
 
-    # --- Save JSON ---
     out_path = results_dir / "comparison_summary.json"
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2)
@@ -292,10 +258,6 @@ def _print_table(metric_data: dict) -> None:
         print(row)
     print("=" * len(header) + "\n")
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare DriftSync models.")

@@ -1,16 +1,7 @@
-"""
-Headless Session Generator
-===========================
-Generates synthetic session data without a GUI for development, CI, and
-quick-start demos. Simulates a realistic cognitive drift pattern:
+"""Generate synthetic sessions with increasing response delays and error rates.
 
-  - Early trials: fast, accurate.
-  - Middle trials: slight fatigue, minor errors creep in.
-  - Late trials: increased error rate, slower reaction time.
-
-Usage
------
-    python -m driftsync.simulator.headless_generator --sessions 5 --trials 200
+Run `python -m driftsync.simulator.headless_generator --sessions 5 --trials 200`
+to create a small dataset without opening the GUI.
 """
 
 from __future__ import annotations
@@ -64,7 +55,6 @@ def generate_synthetic_session(
     for i in range(num_trials):
         progress = i / num_trials                        # [0, 1]
 
-        # --- Compute fatigue parameters ---
         mu_rt    = 0.45 + 0.55 * progress               # gets slower
         sigma_rt = 0.08 + 0.12 * progress               # more variable
 
@@ -78,19 +68,16 @@ def generate_synthetic_session(
         logit = -3.0 + 5.0 * progress + 2.0 * recent_err_rate
         p_error = _sigmoid(logit)
 
-        # Generate stimulus
         stimulus = engine.next_stimulus()
         shape     = stimulus["shape"]
         rule      = stimulus["rule"]
 
-        # Simulate player response
         rt = max(0.05, random.gauss(mu_rt, sigma_rt))
         rt = min(rt, stimulus["time_window"])
 
         # Correct response = click target, skip distractor
         should_click = (shape == rule)
         if random.random() < p_error:
-            # make a mistake
             action = "skip" if should_click else "click"
         else:
             action = "click" if should_click else "skip"
@@ -129,10 +116,6 @@ def generate_dataset(
     logger.info("Generated %d synthetic sessions in %s", num_sessions, cfg.data_dir)
     return paths
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate synthetic DriftSync sessions.")

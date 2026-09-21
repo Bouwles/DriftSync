@@ -1,8 +1,4 @@
-"""
-Reproducibility Utilities
-==========================
-Seed all random number generators for reproducible experiments.
-"""
+"""Seed random generators and select the PyTorch device."""
 
 import os
 import random

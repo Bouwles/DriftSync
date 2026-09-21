@@ -1,9 +1,4 @@
-"""
-DriftSync Interactive Application
-Pygame GUI with flat developer-tool aesthetic and left sidebar navigation.
-
-Screens: SPLASH / MENU / LEARN / DEMO / RESULTS / PLAY_TASK / LIVE_MODE
-"""
+"""Pygame workspace for recording tasks, training models, and exploring results."""
 
 import json
 import logging

@@ -1,18 +1,6 @@
-"""
-Full Experiment Runner
-======================
-Runs the complete DriftSync research pipeline end-to-end:
+"""Generate data, train both sequence models, and compare their test results.
 
-    1. Generate synthetic cognitive drift data
-    2. Preprocess and build sequence arrays
-    3. Train LSTM model
-    4. Train Transformer model
-    5. Compare models and generate all visualisations
-
-Usage
------
-    python run_experiment.py
-    python run_experiment.py --sessions 20 --epochs 50 --quick
+Run `python run_experiment.py --quick` for a short experiment.
 """
 
 import argparse
@@ -59,9 +47,7 @@ def main() -> None:
 
     set_seed(args.seed)
 
-    # -----------------------------------------------------------------------
     # Step 1 — Generate data
-    # -----------------------------------------------------------------------
     logger.info("=" * 60)
     logger.info("STEP 1: Generating synthetic sessions")
     logger.info("=" * 60)
@@ -69,9 +55,7 @@ def main() -> None:
     sim_cfg = SimulatorConfig(num_trials=args.trials)
     generate_dataset(num_sessions=args.sessions, cfg=sim_cfg, base_seed=args.seed)
 
-    # -----------------------------------------------------------------------
     # Step 2 — Preprocess
-    # -----------------------------------------------------------------------
     logger.info("=" * 60)
     logger.info("STEP 2: Preprocessing")
     logger.info("=" * 60)
@@ -111,9 +95,7 @@ def main() -> None:
 
     all_results = {}
 
-    # -----------------------------------------------------------------------
     # Steps 3 & 4 — Train models
-    # -----------------------------------------------------------------------
     for model_type in ["lstm", "transformer"]:
         logger.info("=" * 60)
         logger.info("STEP 3/4: Training %s", model_type.upper())
@@ -128,7 +110,6 @@ def main() -> None:
         trainer = Trainer(model, train_loader, val_loader, train_cfg, device)
         history = trainer.train()
 
-        # Save training history plot
         plot_training_history(
             history, model_type,
             out_path=results_dir / f"{model_type}_training_history.png",
@@ -159,9 +140,7 @@ def main() -> None:
             "n_params": model.count_parameters(),
         }
 
-    # -----------------------------------------------------------------------
     # Step 5 — Compare
-    # -----------------------------------------------------------------------
     logger.info("=" * 60)
     logger.info("STEP 5: Comparing models and generating plots")
     logger.info("=" * 60)
@@ -169,7 +148,6 @@ def main() -> None:
     comparison = run_comparison(data_cfg=data_cfg, results_dir=str(results_dir))
     all_results["comparison"] = comparison
 
-    # Save final summary
     summary_path = results_dir / "experiment_summary.json"
     with open(summary_path, "w") as f:
         json.dump(all_results, f, indent=2)

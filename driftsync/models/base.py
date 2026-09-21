@@ -1,12 +1,4 @@
-"""
-Base Model Interface
-====================
-Abstract base class that both LSTM and Transformer models inherit from.
-Provides:
-  - A unified forward(x) -> logit interface.
-  - Monte Carlo Dropout inference for uncertainty estimation.
-  - Parameter counting utility.
-"""
+"""Shared logit interface, MC-dropout inference, and parameter counting."""
 
 import torch
 import torch.nn as nn
@@ -34,9 +26,6 @@ class DriftPredictor(ABC, nn.Module):
         """
         ...
 
-    # ------------------------------------------------------------------
-    # Inference helpers
-    # ------------------------------------------------------------------
 
     def predict_proba(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -88,9 +77,6 @@ class DriftPredictor(ABC, nn.Module):
         uncertainty = samples_tensor.std(dim=0)         # (batch,)
         return mean_proba, uncertainty
 
-    # ------------------------------------------------------------------
-    # Utility
-    # ------------------------------------------------------------------
 
     def count_parameters(self) -> int:
         """Return total number of trainable parameters."""

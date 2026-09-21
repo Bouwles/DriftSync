@@ -1,8 +1,4 @@
-"""
-Evaluation Metrics
-==================
-All classification and calibration metrics used for model evaluation.
-"""
+"""Classification, calibration, and lead-time metrics."""
 
 import numpy as np
 from sklearn.metrics import (

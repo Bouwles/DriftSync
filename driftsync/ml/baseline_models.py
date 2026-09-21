@@ -1,17 +1,7 @@
-"""
-Baseline ML Models
-==================
-Simple models that serve as baselines alongside the LSTM and Transformer.
+"""Sklearn baselines and a rolling-error threshold fallback.
 
-Models (in order of preference):
-  1. RandomForestDriftModel  - sklearn RandomForest on last-timestep features
-  2. LogisticRegressionModel - sklearn LogisticRegression on last-timestep features
-  3. ThresholdModel          - rule-based fallback using rolling error rate
-
-If not enough data exists to train sklearn models, the system falls back to
-threshold logic and clearly indicates the fallback mode.
-
-Trained models are saved with pickle in driftsync/results/checkpoints/.
+Random forest and logistic regression use the last timestep of each window.
+Trained models are pickled in driftsync/results/checkpoints/.
 """
 
 import pickle
@@ -26,10 +16,6 @@ logger = get_logger(__name__)
 
 CHECKPOINT_DIR = Path("driftsync/results/checkpoints")
 
-
-# ---------------------------------------------------------------------------
-# Threshold fallback
-# ---------------------------------------------------------------------------
 
 class ThresholdModel:
     """
@@ -64,10 +50,6 @@ class ThresholdModel:
     def is_high_risk(self, features: np.ndarray) -> bool:
         return self.predict_proba(features) >= self.threshold
 
-
-# ---------------------------------------------------------------------------
-# Sklearn model wrapper
-# ---------------------------------------------------------------------------
 
 class SklearnDriftModel:
     """
@@ -166,10 +148,6 @@ class SklearnDriftModel:
             logger.warning("Failed to load sklearn model: %s", e)
             return None
 
-
-# ---------------------------------------------------------------------------
-# Model selection helpers
-# ---------------------------------------------------------------------------
 
 def train_baseline_models(X: np.ndarray, y: np.ndarray) -> Tuple[str, object]:
     """

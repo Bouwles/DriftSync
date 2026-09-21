@@ -1,8 +1,4 @@
-"""
-DriftSync Configuration
-=======================
-Central configuration for all system components.
-"""
+"""Configuration for simulation, data processing, models, training, and inference."""
 
 from dataclasses import dataclass, field
 from typing import List
@@ -107,7 +103,6 @@ class TrainingConfig:
     early_stop_patience: int = 15
     early_stop_delta: float = 1e-4
 
-    # Checkpointing
     checkpoint_dir: str = "driftsync/results/checkpoints"
     save_best_only: bool = True
 
@@ -159,5 +154,4 @@ class DriftSyncConfig:
     calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
 
 
-# Default global config instance
 CONFIG = DriftSyncConfig()

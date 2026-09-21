@@ -1,11 +1,6 @@
-"""
-Training Pipeline
-=================
-Orchestrates the full train -> evaluate -> save workflow for a single model.
+"""Train, evaluate, and save a single model.
 
-Callable via:
-    python -m driftsync.training.pipeline --model lstm
-    python -m driftsync.training.pipeline --model transformer
+Run `python -m driftsync.training.pipeline --model lstm` or select transformer.
 """
 
 from __future__ import annotations
@@ -78,7 +73,6 @@ def run_pipeline(
     device = get_device(train_cfg.device)
     logger.info("Device: %s", device)
 
-    # --- Data ---
     processed_dir = Path(data_cfg.processed_data_dir)
     x_path = processed_dir / "X.npy"
     y_path = processed_dir / "y.npy"
@@ -111,19 +105,16 @@ def run_pipeline(
         batch_size=train_cfg.batch_size,
     )
 
-    # --- Model ---
     model = build_model(model_type, model_cfg)
     logger.info("Model: %s  |  params=%d", type(model).__name__, model.count_parameters())
 
-    # --- Train ---
     trainer = Trainer(model, train_loader, val_loader, train_cfg, device)
     history = trainer.train()
 
-    # --- Load best checkpoint for evaluation ---
+    # Load best checkpoint for evaluation
     trainer.load_best_checkpoint()
     model.eval()
 
-    # --- Test evaluation ---
     all_labels, all_proba = [], []
     with torch.no_grad():
         for X_batch, y_batch in test_loader:
@@ -144,7 +135,6 @@ def run_pipeline(
         test_metrics["roc_auc"],
     )
 
-    # Save results
     results_dir = Path(CONFIG.evaluation.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
     results = {
@@ -161,10 +151,6 @@ def run_pipeline(
 
     return results
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train a DriftSync model.")

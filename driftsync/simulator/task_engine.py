@@ -1,17 +1,7 @@
-"""
-Task Engine
-===========
-Core logic for the cognitive drift simulator task.
+"""Stimulus generation, response scoring, and trial recording for the shape task.
 
-The task is a rapid-fire reaction + classification game:
-- A stimulus appears at a random screen position.
-- The stimulus is one of three shapes: CIRCLE, SQUARE, TRIANGLE.
-- A rule is displayed: e.g. "Click CIRCLES only".
-- The player must click the correct shape within a time window.
-- Reaction time, correctness, and metadata are recorded per trial.
-
-Fatigue is modelled by progressively tightening the time window and
-adding mild spatial noise to stimulus placement after trial N.
+Participants click the target shape and skip distractors. Fatigue settings
+progressively shorten the response window and add spatial noise.
 """
 
 import time
@@ -28,10 +18,6 @@ from driftsync.utils import get_logger
 
 logger = get_logger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Data Structures
-# ---------------------------------------------------------------------------
 
 @dataclass
 class Trial:
@@ -62,10 +48,6 @@ class SessionData:
         return d
 
 
-# ---------------------------------------------------------------------------
-# Task Engine (non-GUI core logic)
-# ---------------------------------------------------------------------------
-
 class TaskEngine:
     """
     Manages trial sequencing and state for the cognitive task.
@@ -90,9 +72,6 @@ class TaskEngine:
         self._active_rule: str = random.choice(self.SHAPES)
         self._rule_change_interval = 20         # change rule every N trials
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
 
     @property
     def trial_count(self) -> int:
@@ -107,9 +86,6 @@ class TaskEngine:
     def is_finished(self) -> bool:
         return self._trial_count >= self.cfg.num_trials
 
-    # ------------------------------------------------------------------
-    # Trial generation
-    # ------------------------------------------------------------------
 
     def next_stimulus(self) -> dict:
         """
@@ -120,7 +96,6 @@ class TaskEngine:
         """
         # Refresh rule periodically
         if self._trial_count > 0 and self._trial_count % self._rule_change_interval == 0:
-            # Pick a different shape
             candidates = [s for s in self.SHAPES if s != self._active_rule]
             self._active_rule = random.choice(candidates)
 
@@ -199,9 +174,6 @@ class TaskEngine:
         self._trial_count += 1
         return trial
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     def _fatigue_noise(self) -> float:
         """
@@ -211,9 +183,6 @@ class TaskEngine:
         progress = self._trial_count / max(1, self.cfg.num_trials)
         return self.cfg.noise_base * self.cfg.window_width * progress * 0.3
 
-    # ------------------------------------------------------------------
-    # Persistence
-    # ------------------------------------------------------------------
 
     def save_session(self) -> Path:
         """Save session JSON to disk."""

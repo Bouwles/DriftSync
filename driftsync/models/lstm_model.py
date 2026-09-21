@@ -1,30 +1,8 @@
-"""
-LSTM-Based Drift Predictor
-===========================
-Multi-layer LSTM with:
-  - Configurable depth and hidden dimension.
-  - Layer normalisation between LSTM layers.
-  - Dropout on all inter-layer connections.
-  - Orthogonal weight initialisation for LSTM gates.
-  - Optional bidirectional encoding.
+"""Stacked LSTM with layer normalization, dropout, and residual connections.
 
-Architecture
-------------
-    Input (B, L, F)
-        ↓
-    InputProjection (Linear + LayerNorm)
-        ↓
-    LSTM Layer 1  -> LayerNorm -> Dropout
-        ↓
-    LSTM Layer 2  -> LayerNorm -> Dropout
-        ↓
-    ...
-        ↓
-    Last hidden state h_T  (B, H)
-        ↓
-    Classification Head (Linear -> Dropout -> Linear)
-        ↓
-    Logit (B,)
+Accepts (batch, sequence, features) and returns one logit per batch item.
+The classifier reads the final timestep after the recurrent stack; depth,
+hidden size, and bidirectional encoding are configurable.
 """
 
 from __future__ import annotations
@@ -51,14 +29,13 @@ class LSTMDriftPredictor(DriftPredictor):
         D = self.cfg.hidden_dim
         dirs = 2 if self.cfg.bidirectional else 1
 
-        # --- Input projection ---
         self.input_proj = nn.Sequential(
             nn.Linear(self.cfg.input_dim, D),
             nn.LayerNorm(D),
             nn.GELU(),
         )
 
-        # --- LSTM stack (one cell per layer for fine-grained control) ---
+        # LSTM stack (one cell per layer for fine-grained control)
         self.lstm_cells: nn.ModuleList = nn.ModuleList()
         self.layer_norms: nn.ModuleList = nn.ModuleList()
         self.dropouts: nn.ModuleList = nn.ModuleList()
@@ -76,7 +53,6 @@ class LSTMDriftPredictor(DriftPredictor):
             self.layer_norms.append(nn.LayerNorm(D * dirs))
             self.dropouts.append(nn.Dropout(self.cfg.dropout))
 
-        # --- Classification head ---
         self.head = nn.Sequential(
             nn.Linear(D * dirs, D // 2),
             nn.GELU(),
@@ -86,9 +62,6 @@ class LSTMDriftPredictor(DriftPredictor):
 
         self._init_weights()
 
-    # ------------------------------------------------------------------
-    # Weight initialisation
-    # ------------------------------------------------------------------
 
     def _init_weights(self) -> None:
         """
@@ -107,15 +80,11 @@ class LSTMDriftPredictor(DriftPredictor):
                     hidden_size = param.data.shape[0] // 4
                     param.data[hidden_size: 2 * hidden_size].fill_(1.0)
 
-        # Head
         for module in self.head.modules():
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
                 nn.init.zeros_(module.bias)
 
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -125,7 +94,6 @@ class LSTMDriftPredictor(DriftPredictor):
         Returns:
             logits: (batch,)
         """
-        # Project input features
         out = self.input_proj(x)   # (B, L, D)
 
         # Stack LSTM layers with residual connections where dimensions match

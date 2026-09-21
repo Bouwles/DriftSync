@@ -1,11 +1,7 @@
-"""
-Calibration Engine
-==================
-Measures a user's normal performance during a short calibration phase and
-stores the resulting baseline statistics. During the main session, live
-features are compared against these values to detect deviation.
+"""Measure and save a participant's baseline performance from calibration trials.
 
-Calibration data is saved as JSON in the sessions/calibration/ directory.
+Baseline JSON is stored in sessions/calibration/ and used to compare later
+behaviour with the participant's usual response times and error rate.
 """
 
 import json

@@ -1,13 +1,4 @@
-"""
-Run the GUI Simulator
-=====================
-Entry point for the interactive human task simulator.
-
-Usage
------
-    python -m driftsync.simulator.run_gui
-    python -m driftsync.simulator.run_gui --trials 300
-"""
+"""Start the interactive task: python -m driftsync.simulator.run_gui --trials 300."""
 
 import argparse
 from driftsync.configs import SimulatorConfig

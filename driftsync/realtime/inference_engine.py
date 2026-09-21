@@ -1,14 +1,7 @@
-"""
-Real-Time Inference Engine
-===========================
-Maintains a rolling feature buffer of length `seq_len`, accepts a new
-trial observation at each timestep, and outputs:
+"""Buffer trial features and estimate future-error risk with MC dropout.
 
-    - P(error in next K steps)         — mean probability
-    - Uncertainty                      — std of MC-Dropout samples
-    - Warning flag                     — whether thresholds are exceeded
-
-Designed to be decoupled from any GUI so it can be unit-tested.
+Each prediction reports mean error probability, sample standard deviation,
+and a warning flag based on the configured risk and uncertainty thresholds.
 """
 
 from __future__ import annotations
@@ -31,9 +24,7 @@ from driftsync.utils import get_logger, get_device
 logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Feature names (must match preprocessing.FEATURE_COLS order)
-# ---------------------------------------------------------------------------
+# Feature order must match data.dataset.FEATURE_COLS and trained checkpoints.
 
 FEATURE_COLS = [
     "reaction_time_norm",
@@ -47,7 +38,6 @@ FEATURE_COLS = [
     "streak_incorrect",
     "target_match",
     "action_click",
-    # Extended features (v2)
     "rolling_rt_variance",
     "time_since_last_error_norm",
     "rt_trend",
@@ -100,7 +90,7 @@ class RealtimeInferenceEngine:
         self._correct_streak: int   = 0
         self._error_streak:   int   = 0
 
-        # Extra state for new features
+        # Streaming state for response trends and time since the last error.
         self._rt_history: deque          = deque(maxlen=10)
         self._rt_norm_history: deque     = deque(maxlen=20)
         self._trials_since_last_error: int = 20
@@ -112,9 +102,6 @@ class RealtimeInferenceEngine:
         self._log_file = Path(self.rt_cfg.log_file)
         self._log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------------------
-    # Model loading
-    # ------------------------------------------------------------------
 
     def load_model(self, model_type: Optional[str] = None) -> None:
         """
@@ -136,9 +123,6 @@ class RealtimeInferenceEngine:
         self.model.eval()
         logger.info("Inference engine loaded %s (epoch %d)", model_type.upper(), ckpt.get("epoch", "?"))
 
-    # ------------------------------------------------------------------
-    # Trial update
-    # ------------------------------------------------------------------
 
     def update(
         self,
@@ -177,7 +161,6 @@ class RealtimeInferenceEngine:
         self._error_history.append(int(not is_correct))
         self._rt_history.append(reaction_time)
 
-        # Compute streaming features
         feats = self._compute_features(
             reaction_time=reaction_time,
             is_correct=is_correct,
@@ -209,7 +192,6 @@ class RealtimeInferenceEngine:
             or uncertainty_val > self.rt_cfg.uncertainty_threshold
         )
 
-        # Log event
         self._log.append({
             "trial_idx":    self._trial_idx,
             "timestamp":    now,
@@ -221,9 +203,7 @@ class RealtimeInferenceEngine:
 
         return mean_p_val, uncertainty_val, warning
 
-    # ------------------------------------------------------------------
     # Feature computation (streaming, no pandas dependency)
-    # ------------------------------------------------------------------
 
     def _compute_features(
         self,
@@ -235,9 +215,7 @@ class RealtimeInferenceEngine:
         target_shape: str,
         action: str,
     ) -> np.ndarray:
-        """
-        Compute the feature vector for one trial using running statistics.
-        """
+        """Compute the feature vector for one trial using running statistics."""
         # Reaction time: normalise using historical median / IQR if available
         all_rts = list(self._rt_norm_history)
         all_rts.append(reaction_time)
@@ -250,7 +228,6 @@ class RealtimeInferenceEngine:
         # Elapsed time: rough normalisation (assume ~5 min session)
         elapsed_norm = min(elapsed / 300.0, 1.0)
 
-        # Rolling error rates
         err_hist = list(self._error_history)
         err_rate_5  = float(np.mean(err_hist[-5:]  if len(err_hist) >= 5  else err_hist)) if err_hist else 0.0
         err_rate_10 = float(np.mean(err_hist[-10:] if len(err_hist) >= 10 else err_hist)) if err_hist else 0.0
@@ -258,20 +235,18 @@ class RealtimeInferenceEngine:
         # ITI normalised (clip to 5s)
         iti_norm = float(np.clip(iti / 5.0, 0.0, 1.0))
 
-        # Cumulative error rate
         cumulative_err = float(sum(err_hist) / max(self._trial_idx, 1))
 
         # Streaks (normalised by 20)
         streak_c = float(min(self._correct_streak / 20.0, 1.0))
         streak_i = float(min(self._error_streak  / 20.0, 1.0))
 
-        # Target match
         target_match = float(stimulus_shape == target_shape)
         action_click = float(action == "click")
 
         self._rt_norm_history.append(reaction_time)
 
-        # --- Rolling RT variance (inconsistency score) ---
+        # Rolling RT variance (inconsistency score)
         rts = list(self._rt_history)
         if len(rts) >= 2:
             rt_std = float(np.std(rts))
@@ -280,10 +255,10 @@ class RealtimeInferenceEngine:
         else:
             rt_var_norm = 0.0
 
-        # --- Time since last error (normalised, cap 20) ---
+        # Time since last error (normalised, cap 20)
         since_err_norm = float(min(self._trials_since_last_error, 20) / 20.0)
 
-        # --- RT trend over last 5 trials ---
+        # RT trend over last 5 trials
         if len(rts) >= 3:
             x     = np.arange(len(rts), dtype=float)
             slope = float(np.polyfit(x, rts, 1)[0])
@@ -291,7 +266,6 @@ class RealtimeInferenceEngine:
         else:
             rt_trend_norm = 0.5
 
-        # --- Fatigue index ---
         fatigue = float(np.clip(elapsed_norm * cumulative_err, 0.0, 1.0))
 
         return np.array([
@@ -302,9 +276,6 @@ class RealtimeInferenceEngine:
             rt_var_norm, since_err_norm, rt_trend_norm, fatigue,
         ], dtype=np.float32)
 
-    # ------------------------------------------------------------------
-    # Persistence
-    # ------------------------------------------------------------------
 
     def save_log(self) -> None:
         """Flush inference log to disk."""
